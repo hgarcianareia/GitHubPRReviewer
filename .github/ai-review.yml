@@ -1,32 +1,32 @@
-# AI PR Review Configuration
-# This file allows you to customize the behavior of the AI PR review action.
-
 # Enable or disable AI reviews globally
 enabled: true
 
-# Claude model to use for reviews
-# Options: claude-sonnet-4-5-20250929, claude-opus-4-5-20251101
+# Claude model to use (claude-sonnet-4-5-20250929, claude-opus-4-5-20251101)
 model: claude-sonnet-4-5-20250929
 
 # Maximum tokens for Claude's response
 maxTokens: 4096
 
-# Review focus areas - disable any areas you don't want reviewed
+# Review focus areas - toggle which aspects to review
 reviewAreas:
-  codeQuality: true      # Clean code, readability, maintainability
-  security: true         # Vulnerabilities, injection risks, data exposure
-  documentation: true    # Code comments, function docs
-  testCoverage: true     # Test coverage gaps, edge cases
-  conventions: true      # Language-specific best practices
+  # Clean code, readability, maintainability
+  codeQuality: true
+  # Vulnerabilities, injection risks, data exposure
+  security: true
+  # Code comments, function docs
+  documentation: true
+  # Test coverage gaps, edge cases
+  testCoverage: true
+  # Language-specific best practices
+  conventions: true
 
-# Languages to provide specialized feedback for
+# Languages for specialized feedback
 languages:
   - csharp
   - typescript
   - python
 
-# File patterns to ignore (glob patterns)
-# Files matching these patterns will not be reviewed
+# File patterns to ignore (glob patterns) - files matching these won't be reviewed
 ignorePatterns:
   - "*.lock"
   - "package-lock.json"
@@ -44,83 +44,98 @@ ignorePatterns:
   - "*.Designer.cs"
   - "Migrations/**"
 
-# Maximum characters per chunk for large diffs
-# Larger diffs will be split into multiple API calls
+# Maximum characters per chunk - larger diffs are split into multiple API calls
 chunkSize: 100000
 
-# Maximum number of files to review per PR
-# Prevents excessive API usage on very large PRs
+# Maximum number of files to review per PR - prevents excessive API usage
 maxFilesPerReview: 50
 
-# Severity levels to include in the review
-# Set to false to hide comments of that severity
+# Severity levels to include in the review - set false to hide that severity
 severity:
-  critical: true    # Security issues, bugs causing failures
-  warning: true     # Potential bugs, performance issues
-  suggestion: true  # Improvements for maintainability
-  nitpick: false    # Minor style issues (disabled by default)
+  # Security issues, bugs causing failures
+  critical: true
+  # Potential bugs, performance issues
+  warning: true
+  # Improvements for maintainability
+  suggestion: true
+  # Minor style issues
+  nitpick: false
 
-# ============================================================================
-# NEW FEATURES
-# ============================================================================
-
-# PR Size Warning - warn when PR is too large
+# PR Size Warning - alerts when PRs exceed recommended size
 prSizeWarning:
+  # Enable PR size warnings
   enabled: true
-  maxLines: 1000            # Warn if total changes exceed this
-  maxFiles: 30              # Warn if number of files exceeds this
+  # Warn if total changed lines exceed this number
+  maxLines: 1000
+  # Warn if number of files exceed this number
+  maxFiles: 30
 
-# Review Caching - skip re-review if commit already reviewed
+# Review Caching - skip re-review if same commit was already reviewed
 caching:
+  # Enable review caching
   enabled: true
 
-# Custom Review Instructions - parse PR description for focus areas
-# Use <!-- ai-review: focus on security --> in PR description
+# Custom Review Instructions - parse <!-- ai-review: instructions --> from PR description
 customInstructions:
+  # Enable custom instructions parsing
   enabled: true
-  # Looks for: <!-- ai-review: your instructions here -->
 
-# File-level ignore comments
-# Add "// ai-review-ignore" or "# ai-review-ignore" to skip specific lines
+# Inline Ignore - skip specific lines/files with comments like // ai-review-ignore
 inlineIgnore:
+  # Enable inline ignore comments
   enabled: true
+  # Patterns to detect ignore comments
   patterns:
+    # Skip this specific line
     - "ai-review-ignore"
+    # Skip the next line after this comment
     - "ai-review-ignore-next-line"
+    # Skip the entire file
     - "ai-review-ignore-file"
 
-# Metrics and Analytics
+# Metrics and Analytics - track review performance
 metrics:
+  # Enable metrics collection
   enabled: true
-  showInSummary: true       # Show in GitHub Actions summary
-  showInComment: true       # Show in PR review comment
+  # Show metrics in GitHub Actions summary
+  showInSummary: true
+  # Show metrics in PR review comment
+  showInComment: true
 
-# ============================================================================
-# HIGH IMPACT FEATURES
-# ============================================================================
-
-# Review Feedback Loop - Track reactions on AI comments
-# Feedback is displayed in GitHub Actions Summary
+# Feedback Loop - track emoji reactions on comments to measure effectiveness
 feedbackLoop:
+  # Enable feedback tracking
   enabled: true
 
-# Contextual Awareness - Read related files for better reviews
+# Contextual Awareness - read related files for more accurate reviews
 contextualAwareness:
+  # Enable contextual awareness
   enabled: true
-  maxRelatedFiles: 5        # Maximum number of related files to read
-  includeImports: true      # Include imported/required files
-  includeTests: false       # Include test files for the changed files
-  includeSimilarFiles: false # Include files with similar names
+  # Maximum number of related files to read
+  maxRelatedFiles: 5
+  # Include files that are imported/required by changed files
+  includeImports: true
+  # Include test files for the changed files
+  includeTests: false
+  # Include files with similar names
+  includeSimilarFiles: false
 
-# Auto-fix PRs - Automatically apply suggested fixes
+# Auto-fix PRs - automatically create separate PRs with suggested fixes
 autoFix:
-  enabled: false            # Disabled by default for safety
-  createSeparatePR: true    # Create fixes in a separate PR (recommended)
-  requireApproval: true     # Require approval before creating PR
-  branchPrefix: 'ai-fix/'   # Prefix for auto-fix branches
+  # Enable auto-fix (disabled by default for safety)
+  enabled: false
+  # Create fixes in a separate PR instead of committing to the same branch
+  createSeparatePR: true
+  # Require manual approval before creating the fix PR
+  requireApproval: true
+  # Branch name prefix for auto-fix branches
+  branchPrefix: 'ai-fix/'
 
-# Severity Threshold - Skip reviews for clean PRs
+# Severity Threshold - filter comments by minimum severity
 severityThreshold:
-  enabled: false            # Disabled by default
-  minSeverityToComment: 'warning'  # Minimum: critical, warning, suggestion, nitpick
-  skipCleanPRs: false       # Skip posting review if no issues above threshold
+  # Enable severity filtering
+  enabled: false
+  # Minimum severity level to post comments (critical, warning, suggestion, nitpick)
+  minSeverityToComment: 'warning'
+  # Skip posting review entirely if no issues above threshold
+  skipCleanPRs: false
