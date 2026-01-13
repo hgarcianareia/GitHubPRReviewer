@@ -10,6 +10,10 @@ import path from 'path';
  * @param {string} value - The PR number as a string
  * @returns {number} - The parsed PR number
  * @throws {Error} - If the value is not a valid positive integer
+ * @example
+ * parsePRNumber('42')  // returns 42
+ * parsePRNumber('0')   // throws Error
+ * parsePRNumber('abc') // throws Error
  */
 export function parsePRNumber(value) {
   const num = parseInt(value, 10);
@@ -27,7 +31,7 @@ const MAX_BRANCH_NAME_LENGTH = 200;
 /**
  * Sanitize a git branch name to prevent command injection
  * Allows valid git ref characters: alphanumeric, hyphens, underscores, forward slashes, dots, and tildes
- * Blocks shell injection characters: ; | & $ ` ( ) { } < > \ " '
+ * Blocks shell injection and problematic characters: ; | & $ ` ( ) { } < > \ " ' @ #
  * @param {string} name - The branch name to sanitize
  * @returns {string} - The sanitized branch name (max 200 chars)
  */
@@ -35,19 +39,29 @@ export function sanitizeBranchName(name) {
   if (!name || typeof name !== 'string') {
     return '';
   }
-  // Remove shell injection characters while preserving valid git ref chars (. and ~)
-  return name
-    .replace(/[;|&$`(){}<>\\\"']/g, '-')
+  // Remove shell injection and problematic characters
+  const sanitized = name
+    .replace(/[;|&$`(){}<>\\\"'@#]/g, '-')
     .replace(/\/+/g, '/')
     .replace(/^\/|\/$/g, '')
-    .replace(/-+/g, '-')
-    .slice(0, MAX_BRANCH_NAME_LENGTH);
+    .replace(/-+/g, '-');
+
+  // Warn if truncation occurs (useful for debugging)
+  if (sanitized.length > MAX_BRANCH_NAME_LENGTH) {
+    console.warn(`[WARN] Branch name truncated from ${sanitized.length} to ${MAX_BRANCH_NAME_LENGTH} chars`);
+  }
+
+  return sanitized.slice(0, MAX_BRANCH_NAME_LENGTH);
 }
 
 /**
  * Check if a file should be ignored based on patterns
- * Note: Patterns like '*.min.js' only match files in the root directory.
- * Use '**\/*.min.js' to match in subdirectories.
+ *
+ * Pattern matching rules:
+ * - Patterns without path separators match exact filenames (e.g., '*.lock' matches 'yarn.lock')
+ * - Use `**\/*.ext` to match files in any directory (e.g., '**\/*.min.js' matches 'src/bundle.min.js')
+ * - Use `dir/**` to match all files in a directory (e.g., 'dist/**' matches 'dist/bundle.js')
+ *
  * @param {string} filename - The filename to check
  * @param {string[]} ignorePatterns - Array of glob patterns
  * @returns {boolean} - True if the file should be ignored
@@ -88,6 +102,7 @@ export function detectLanguage(filename) {
 /**
  * Deep merge two objects
  * Arrays are replaced, not merged. Only plain objects are recursively merged.
+ * Null/undefined values in source will replace target values.
  * @param {Object} target - The target object
  * @param {Object} source - The source object
  * @returns {Object} - The merged object
@@ -95,15 +110,29 @@ export function detectLanguage(filename) {
 export function deepMerge(target, source) {
   const result = { ...target };
   for (const key in source) {
-    // If source value is an array or not an object, replace directly
-    if (Array.isArray(source[key]) || !(source[key] instanceof Object)) {
-      result[key] = source[key];
-    } else if (key in target && target[key] instanceof Object && !Array.isArray(target[key])) {
-      // Both are non-array objects, merge recursively
-      result[key] = deepMerge(target[key], source[key]);
-    } else {
-      // Target doesn't have this key or target value is not an object
-      result[key] = source[key];
+    const sourceValue = source[key];
+    const targetValue = target[key];
+
+    // Handle null/undefined explicitly - they replace target values
+    if (sourceValue === null || sourceValue === undefined) {
+      result[key] = sourceValue;
+    }
+    // Arrays replace, don't merge
+    else if (Array.isArray(sourceValue)) {
+      result[key] = sourceValue;
+    }
+    // Plain objects get recursively merged if target also has a plain object
+    else if (
+      typeof sourceValue === 'object' &&
+      typeof targetValue === 'object' &&
+      targetValue !== null &&
+      !Array.isArray(targetValue)
+    ) {
+      result[key] = deepMerge(targetValue, sourceValue);
+    }
+    // Everything else (primitives, objects where target is not an object) replaces
+    else {
+      result[key] = sourceValue;
     }
   }
   return result;

@@ -71,26 +71,31 @@ describe('sanitizeBranchName', () => {
   });
 
   it('should replace shell injection characters with hyphens', () => {
-    // Only dangerous shell characters are replaced, not @ or #
     assert.strictEqual(sanitizeBranchName('test$branch'), 'test-branch');
     assert.strictEqual(sanitizeBranchName('test;branch'), 'test-branch');
     assert.strictEqual(sanitizeBranchName('test|branch'), 'test-branch');
     assert.strictEqual(sanitizeBranchName('test&branch'), 'test-branch');
   });
 
-  it('should preserve non-dangerous special characters', () => {
-    // @ and # are not shell injection risks, so they're preserved
-    assert.strictEqual(sanitizeBranchName('feature@branch'), 'feature@branch');
-    assert.strictEqual(sanitizeBranchName('fix#123'), 'fix#123');
+  it('should also replace @ and # characters', () => {
+    // @ and # are also sanitized for consistency and to avoid URL/comment issues
+    assert.strictEqual(sanitizeBranchName('feature@branch'), 'feature-branch');
+    assert.strictEqual(sanitizeBranchName('fix#123'), 'fix-123');
   });
 
   it('should handle shell injection attempts', () => {
-    // Semicolons are replaced, slashes trimmed from end, spaces preserved
+    // Semicolons replaced, trailing slash trimmed (but space before slash remains)
     assert.strictEqual(sanitizeBranchName('branch; rm -rf /'), 'branch- rm -rf ');
     assert.strictEqual(sanitizeBranchName('branch$(whoami)'), 'branch-whoami-');
     assert.strictEqual(sanitizeBranchName('branch`id`'), 'branch-id-');
     // Slashes are allowed in branch names (e.g., feature/foo), but dangerous chars are removed
     assert.strictEqual(sanitizeBranchName('branch|cat /etc/passwd'), 'branch-cat /etc/passwd');
+  });
+
+  it('should handle non-string input types gracefully', () => {
+    assert.strictEqual(sanitizeBranchName(123), '');
+    assert.strictEqual(sanitizeBranchName({}), '');
+    assert.strictEqual(sanitizeBranchName([]), '');
   });
 
   it('should preserve dots and tildes (valid git ref chars)', () => {
@@ -258,6 +263,27 @@ describe('deepMerge', () => {
     const result = deepMerge(target, source);
     assert.deepStrictEqual(result, { a: { x: 1 } });
   });
+
+  it('should handle null values in source', () => {
+    const target = { a: 1, b: { x: 2 } };
+    const source = { a: null, b: null };
+    const result = deepMerge(target, source);
+    assert.deepStrictEqual(result, { a: null, b: null });
+  });
+
+  it('should handle undefined values in source', () => {
+    const target = { a: 1, b: 2 };
+    const source = { a: undefined };
+    const result = deepMerge(target, source);
+    assert.deepStrictEqual(result, { a: undefined, b: 2 });
+  });
+
+  it('should handle null values in target', () => {
+    const target = { a: null };
+    const source = { a: { x: 1 } };
+    const result = deepMerge(target, source);
+    assert.deepStrictEqual(result, { a: { x: 1 } });
+  });
 });
 
 // ============================================================================
@@ -397,6 +423,23 @@ index abc123..def456 100644
     assert.strictEqual(files.length, 1);
     assert.strictEqual(files[0].additions, 0);
     assert.strictEqual(files[0].deletions, 0);
+  });
+
+  it('should handle diff with only context lines (no changes)', () => {
+    const contextOnlyDiff = `diff --git a/file.js b/file.js
+--- a/file.js
++++ b/file.js
+@@ -1,3 +1,3 @@
+ const a = 1;
+ const b = 2;
+ const c = 3;
+`;
+    const files = parseDiff(contextOnlyDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].additions, 0);
+    assert.strictEqual(files[0].deletions, 0);
+    assert.strictEqual(files[0].hunks[0].changes.length, 3);
+    assert.ok(files[0].hunks[0].changes.every(c => c.type === 'context'));
   });
 });
 

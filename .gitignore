@@ -1,5 +1,11 @@
 # Dependencies
 node_modules/
+.pnpm-store/
+.yarn/
+
+# Lock files (tracked separately)
+pnpm-lock.yaml
+yarn.lock
 
 # AI Review Cache
 .ai-review-cache/

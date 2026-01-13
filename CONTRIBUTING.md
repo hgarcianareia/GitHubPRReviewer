@@ -112,7 +112,9 @@ cd .github/scripts
 npm test
 ```
 
-When adding new utility functions to `lib/utils.js`, please add corresponding tests to `lib/utils.test.js`. The project uses Node.js built-in test runner (requires Node 20+).
+When adding new utility functions to `lib/utils.js`, please add corresponding tests to `lib/utils.test.js`.
+
+**Note:** Tests require Node.js 20+ for the built-in test runner. Check your version with `node --version`.
 
 ### Pull Request Guidelines
 

@@ -151,8 +151,14 @@ function safeParsePRNumber() {
   try {
     return parsePRNumber(process.env.PR_NUMBER);
   } catch (error) {
-    console.error(`[ERROR] Failed to parse PR_NUMBER environment variable: ${process.env.PR_NUMBER}`);
-    console.error('[ERROR] Ensure PR_NUMBER is set to a valid positive integer.');
+    console.error('='.repeat(60));
+    console.error('[FATAL] PR_NUMBER Validation Failed');
+    console.error('='.repeat(60));
+    console.error(`  Received: "${process.env.PR_NUMBER}"`);
+    console.error('  Expected: A positive integer (e.g., "42", "123")');
+    console.error('');
+    console.error('Please check your GitHub Actions workflow configuration.');
+    console.error('='.repeat(60));
     process.exit(1);
   }
 }
