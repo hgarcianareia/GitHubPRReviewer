@@ -376,7 +376,11 @@ function filterIgnoredContent(diff, config) {
     return { diff, ignoredLines: [] };
   }
 
-  const patterns = config.inlineIgnore.patterns || [];
+  // Ensure patterns is an array
+  let patterns = config.inlineIgnore.patterns || [];
+  if (!Array.isArray(patterns)) {
+    patterns = Object.values(patterns);
+  }
   const lines = diff.split('\n');
   const filteredLines = [];
   const ignoredLines = [];
