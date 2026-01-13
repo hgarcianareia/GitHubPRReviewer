@@ -36,4 +36,12 @@ const unusedConfig = {
   retries: 3
 };
 
-export { getUserById, fetchUserData, processData };
+// New function added to test incremental review
+function deleteUser(userId) {
+  // No authentication check - security issue
+  const query = `DELETE FROM users WHERE id = ${userId}`;  // SQL injection
+  executeQuery(query);
+  console.log("User deleted: " + userId);  // Logging sensitive info
+}
+
+export { getUserById, fetchUserData, processData, deleteUser };
