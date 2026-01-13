@@ -99,3 +99,33 @@ metrics:
   enabled: true
   showInSummary: true       # Show in GitHub Actions summary
   showInComment: true       # Show in PR review comment
+
+# ============================================================================
+# HIGH IMPACT FEATURES
+# ============================================================================
+
+# Review Feedback Loop - Track reactions on AI comments
+# Feedback is displayed in GitHub Actions Summary
+feedbackLoop:
+  enabled: true
+
+# Contextual Awareness - Read related files for better reviews
+contextualAwareness:
+  enabled: true
+  maxRelatedFiles: 5        # Maximum number of related files to read
+  includeImports: true      # Include imported/required files
+  includeTests: false       # Include test files for the changed files
+  includeSimilarFiles: false # Include files with similar names
+
+# Auto-fix PRs - Automatically apply suggested fixes
+autoFix:
+  enabled: false            # Disabled by default for safety
+  createSeparatePR: true    # Create fixes in a separate PR (recommended)
+  requireApproval: true     # Require approval before creating PR
+  branchPrefix: 'ai-fix/'   # Prefix for auto-fix branches
+
+# Severity Threshold - Skip reviews for clean PRs
+severityThreshold:
+  enabled: false            # Disabled by default
+  minSeverityToComment: 'warning'  # Minimum: critical, warning, suggestion, nitpick
+  skipCleanPRs: false       # Skip posting review if no issues above threshold
