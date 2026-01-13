@@ -232,7 +232,13 @@ function deepMerge(target, source) {
  * Check if a file should be ignored based on patterns
  */
 function shouldIgnoreFile(filename, ignorePatterns) {
-  return ignorePatterns.some(pattern => {
+  // Ensure ignorePatterns is an array
+  let patterns = ignorePatterns || [];
+  if (!Array.isArray(patterns)) {
+    patterns = Object.values(patterns);
+  }
+
+  return patterns.some(pattern => {
     const regexPattern = pattern
       .replace(/\./g, '\\.')
       .replace(/\*\*/g, '.*')
