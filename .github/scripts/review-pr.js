@@ -590,15 +590,16 @@ async function checkAndDismissStaleReviews(config, newReviews) {
     return;
   }
 
-  // Count current critical issues
+  // Count current critical issues in this review
   const currentCriticalCount = newReviews.reduce((sum, r) => {
     return sum + (r.inlineComments || []).filter(c => c.severity === 'critical').length;
   }, 0);
 
-  // If no more critical issues, we could dismiss (but GitHub API doesn't allow bots to dismiss)
-  // Instead, we'll note it in the new review
-  if (currentCriticalCount === 0) {
-    log('info', 'Previous critical issues appear to be resolved');
+  // Note: This only checks if the CURRENT review has no critical issues.
+  // It doesn't verify that previously reported issues were actually fixed.
+  // For incremental reviews, this may be misleading since we're only reviewing new changes.
+  if (currentCriticalCount === 0 && previousRequestChanges.length > 0) {
+    log('info', 'No critical issues in current review (previous reviews had REQUEST_CHANGES)');
     return { resolved: true, previousCount: previousRequestChanges.length };
   }
 
@@ -1645,11 +1646,17 @@ ${recommendationEmoji[finalRecommendation]} **Recommendation**: ${finalRecommend
 ${extras.sizeWarning.message}`;
   }
 
-  // Add resolved issues note
+  // Add resolved issues note (with caveat for incremental reviews)
   if (extras.resolvedIssues?.resolved) {
-    markdown += `
+    if (extras.isIncremental) {
+      markdown += `
+
+ℹ️ **Note**: No critical issues found in this incremental review. Please verify that previous critical issues have been addressed.`;
+    } else {
+      markdown += `
 
 ✅ **Previous critical issues appear to be resolved!**`;
+    }
   }
 
   markdown += `
@@ -2009,7 +2016,12 @@ async function main() {
       { isIncremental, sizeWarning, resolvedIssues, autoFixResult }
     );
     // Use fullPRParsedFiles for comment positioning (GitHub requires positions relative to full PR diff)
+    // For incremental reviews, we can only comment on files that are in the full PR diff
     const inlineComments = prepareInlineComments(filteredReviews, fullPRParsedFiles, config, existingComments);
+
+    if (isIncremental && inlineComments.length === 0) {
+      log('info', 'Incremental review: no inline comments could be posted (files not in PR diff). Only posting summary.');
+    }
 
     await postReviewComment(summaryComment, inlineComments, reviewEvent);
 
