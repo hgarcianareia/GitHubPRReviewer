@@ -1304,17 +1304,39 @@ function calculateDiffPosition(file, targetLine) {
   let position = 0;
 
   for (const hunk of file.hunks) {
-    position++;
+    position++; // Count the @@ hunk header
 
     for (const change of hunk.changes) {
       position++;
-      if (change.type === 'add' && change.newLine === targetLine) {
+      // Allow commenting on added lines or context lines that match the target
+      if ((change.type === 'add' || change.type === 'context') && change.newLine === targetLine) {
         return position;
       }
     }
   }
 
-  return null;
+  // If exact line not found, try to find the closest added line in the same hunk
+  // This helps when Claude references a line that's near but not exactly in the diff
+  position = 0;
+  let closestPosition = null;
+  let closestDistance = Infinity;
+
+  for (const hunk of file.hunks) {
+    position++;
+
+    for (const change of hunk.changes) {
+      position++;
+      if (change.type === 'add' && change.newLine) {
+        const distance = Math.abs(change.newLine - targetLine);
+        if (distance < closestDistance && distance <= 5) { // Within 5 lines
+          closestDistance = distance;
+          closestPosition = position;
+        }
+      }
+    }
+  }
+
+  return closestPosition;
 }
 
 // ============================================================================
@@ -1686,30 +1708,46 @@ function prepareInlineComments(reviews, parsedFiles, config, existingComments = 
   const comments = [];
   const fileMap = new Map(parsedFiles.map(f => [f.newPath, f]));
 
+  // Count total comments from Claude for logging
+  const totalComments = reviews.reduce((sum, r) => sum + (r.inlineComments?.length || 0), 0);
+  log('info', `Processing ${totalComments} inline comments from Claude`);
+
+  let skippedSeverity = 0;
+  let skippedFile = 0;
+  let skippedPosition = 0;
+  let skippedDuplicate = 0;
+
   for (const review of reviews) {
     for (const comment of review.inlineComments || []) {
       if (!config.severity[comment.severity]) {
+        skippedSeverity++;
+        log('debug', `Skipping comment due to severity filter: ${comment.severity}`);
         continue;
       }
 
       const file = fileMap.get(comment.file);
       if (!file) {
+        skippedFile++;
         log('warn', `File not found in diff: ${comment.file}`);
         continue;
       }
 
       const position = calculateDiffPosition(file, comment.line);
       if (!position) {
-        log('warn', `Could not find line ${comment.line} in diff for ${comment.file}`);
+        skippedPosition++;
+        log('warn', `Could not find line ${comment.line} in diff for ${comment.file} (severity: ${comment.severity})`);
         continue;
       }
 
       // Check for existing comment at same location (threading)
       const existing = findExistingComment(existingComments, comment.file, comment.line);
       if (existing) {
+        skippedDuplicate++;
         log('info', `Skipping duplicate comment at ${comment.file}:${comment.line}`);
         continue;
       }
+
+      log('info', `Adding comment at ${comment.file}:${comment.line} (position ${position}, severity: ${comment.severity})`);
 
       const severityEmoji = {
         critical: '🔴',
@@ -1745,6 +1783,9 @@ ${comment.suggestedCode}
       });
     }
   }
+
+  // Log summary of what was skipped
+  log('info', `Inline comments summary: ${comments.length} to post, skipped: ${skippedSeverity} (severity), ${skippedFile} (file not found), ${skippedPosition} (position not found), ${skippedDuplicate} (duplicate)`);
 
   return comments;
 }
