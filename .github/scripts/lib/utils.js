@@ -24,6 +24,74 @@ export function parsePRNumber(value) {
 }
 
 /**
+ * Valid GitHub repository name pattern
+ * Allows alphanumeric, hyphens, underscores, and dots (1-100 chars)
+ * See: https://docs.github.com/en/repositories/creating-and-managing-repositories/about-repositories
+ */
+const REPO_NAME_PATTERN = /^[a-zA-Z0-9._-]{1,100}$/;
+
+/**
+ * Valid GitHub username/org pattern
+ * Allows alphanumeric and hyphens, cannot start/end with hyphen (1-39 chars)
+ * See: https://docs.github.com/en/get-started/signing-up-for-github/signing-up-for-a-new-github-account
+ */
+const GITHUB_USERNAME_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
+
+/**
+ * Valid git SHA pattern (40-char hex or 7+ char short SHA)
+ */
+const GIT_SHA_PATTERN = /^[a-fA-F0-9]{7,40}$/;
+
+/**
+ * Validate a GitHub repository owner (username or org)
+ * @param {string} value - The owner name to validate
+ * @returns {string} - The validated owner name
+ * @throws {Error} - If the value is not a valid GitHub username/org
+ */
+export function validateRepoOwner(value) {
+  if (!value || typeof value !== 'string') {
+    throw new Error('REPO_OWNER is required and must be a string.');
+  }
+  if (!GITHUB_USERNAME_PATTERN.test(value)) {
+    throw new Error(`Invalid REPO_OWNER: "${value}". Must be a valid GitHub username (1-39 alphanumeric chars or hyphens, cannot start/end with hyphen).`);
+  }
+  return value;
+}
+
+/**
+ * Validate a GitHub repository name
+ * @param {string} value - The repo name to validate
+ * @returns {string} - The validated repo name
+ * @throws {Error} - If the value is not a valid repository name
+ */
+export function validateRepoName(value) {
+  if (!value || typeof value !== 'string') {
+    throw new Error('REPO_NAME is required and must be a string.');
+  }
+  if (!REPO_NAME_PATTERN.test(value)) {
+    throw new Error(`Invalid REPO_NAME: "${value}". Must be 1-100 alphanumeric chars, hyphens, underscores, or dots.`);
+  }
+  return value;
+}
+
+/**
+ * Validate a git SHA (commit hash)
+ * @param {string} value - The SHA to validate
+ * @param {string} [name='SHA'] - Name of the variable for error messages
+ * @returns {string} - The validated SHA
+ * @throws {Error} - If the value is not a valid git SHA
+ */
+export function validateGitSha(value, name = 'SHA') {
+  if (!value || typeof value !== 'string') {
+    throw new Error(`${name} is required and must be a string.`);
+  }
+  if (!GIT_SHA_PATTERN.test(value)) {
+    throw new Error(`Invalid ${name}: "${value}". Must be a 7-40 character hexadecimal git SHA.`);
+  }
+  return value;
+}
+
+/**
  * Maximum length for git branch names (git typically allows ~255 bytes)
  */
 const MAX_BRANCH_NAME_LENGTH = 200;

@@ -32,6 +32,9 @@ import path from 'path';
 // Import utility functions (also used for testing)
 import {
   parsePRNumber,
+  validateRepoOwner,
+  validateRepoName,
+  validateGitSha,
   sanitizeBranchName,
   shouldIgnoreFile,
   detectLanguage,
@@ -145,17 +148,22 @@ const octokit = new Octokit({
 });
 
 /**
- * Safely parse PR number with user-friendly error message
+ * Safely validate an environment variable with user-friendly error message
+ * @param {string} name - Environment variable name
+ * @param {Function} validator - Validation function
+ * @param {*} defaultValue - Optional default if not required
  */
-function safeParsePRNumber() {
+function safeValidateEnv(name, validator, defaultValue = undefined) {
   try {
-    return parsePRNumber(process.env.PR_NUMBER);
+    return validator(process.env[name]);
   } catch (error) {
+    if (defaultValue !== undefined) {
+      return defaultValue;
+    }
     console.error('='.repeat(60));
-    console.error('[FATAL] PR_NUMBER Validation Failed');
+    console.error(`[FATAL] ${name} Validation Failed`);
     console.error('='.repeat(60));
-    console.error(`  Received: "${process.env.PR_NUMBER}"`);
-    console.error('  Expected: A positive integer (e.g., "42", "123")');
+    console.error(`  ${error.message}`);
     console.error('');
     console.error('Please check your GitHub Actions workflow configuration.');
     console.error('='.repeat(60));
@@ -164,14 +172,14 @@ function safeParsePRNumber() {
 }
 
 const context = {
-  owner: process.env.REPO_OWNER,
-  repo: process.env.REPO_NAME,
-  prNumber: safeParsePRNumber(),
+  owner: safeValidateEnv('REPO_OWNER', validateRepoOwner),
+  repo: safeValidateEnv('REPO_NAME', validateRepoName),
+  prNumber: safeValidateEnv('PR_NUMBER', parsePRNumber),
   prTitle: process.env.PR_TITLE || '',
   prBody: process.env.PR_BODY || '',
   prAuthor: process.env.PR_AUTHOR || '',
-  baseSha: process.env.BASE_SHA,
-  headSha: process.env.HEAD_SHA,
+  baseSha: safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
+  headSha: safeValidateEnv('HEAD_SHA', (v) => validateGitSha(v, 'HEAD_SHA')),
   eventName: process.env.GITHUB_EVENT_NAME || 'opened',
   cacheHit: process.env.CACHE_HIT === 'true'
 };

@@ -7,6 +7,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   parsePRNumber,
+  validateRepoOwner,
+  validateRepoName,
+  validateGitSha,
   sanitizeBranchName,
   shouldIgnoreFile,
   detectLanguage,
@@ -56,6 +59,92 @@ describe('parsePRNumber', () => {
   it('should throw for undefined/null', () => {
     assert.throws(() => parsePRNumber(undefined), /Invalid PR_NUMBER/);
     assert.throws(() => parsePRNumber(null), /Invalid PR_NUMBER/);
+  });
+});
+
+// ============================================================================
+// validateRepoOwner Tests
+// ============================================================================
+
+describe('validateRepoOwner', () => {
+  it('should accept valid GitHub usernames', () => {
+    assert.strictEqual(validateRepoOwner('octocat'), 'octocat');
+    assert.strictEqual(validateRepoOwner('my-org'), 'my-org');
+    assert.strictEqual(validateRepoOwner('user123'), 'user123');
+    assert.strictEqual(validateRepoOwner('a'), 'a'); // Single char is valid
+  });
+
+  it('should reject invalid usernames', () => {
+    assert.throws(() => validateRepoOwner('-invalid'), /Invalid REPO_OWNER/);
+    assert.throws(() => validateRepoOwner('invalid-'), /Invalid REPO_OWNER/);
+    assert.throws(() => validateRepoOwner('inv@lid'), /Invalid REPO_OWNER/);
+    assert.throws(() => validateRepoOwner('a'.repeat(40)), /Invalid REPO_OWNER/); // Too long
+  });
+
+  it('should reject empty/null/undefined', () => {
+    assert.throws(() => validateRepoOwner(''), /REPO_OWNER is required/);
+    assert.throws(() => validateRepoOwner(null), /REPO_OWNER is required/);
+    assert.throws(() => validateRepoOwner(undefined), /REPO_OWNER is required/);
+  });
+
+  it('should reject non-string values', () => {
+    assert.throws(() => validateRepoOwner(123), /REPO_OWNER is required/);
+    assert.throws(() => validateRepoOwner({}), /REPO_OWNER is required/);
+  });
+});
+
+// ============================================================================
+// validateRepoName Tests
+// ============================================================================
+
+describe('validateRepoName', () => {
+  it('should accept valid repository names', () => {
+    assert.strictEqual(validateRepoName('my-repo'), 'my-repo');
+    assert.strictEqual(validateRepoName('my_repo'), 'my_repo');
+    assert.strictEqual(validateRepoName('my.repo'), 'my.repo');
+    assert.strictEqual(validateRepoName('MyRepo123'), 'MyRepo123');
+  });
+
+  it('should reject invalid repository names', () => {
+    assert.throws(() => validateRepoName('inv@lid'), /Invalid REPO_NAME/);
+    assert.throws(() => validateRepoName('inv lid'), /Invalid REPO_NAME/); // Spaces
+    assert.throws(() => validateRepoName('a'.repeat(101)), /Invalid REPO_NAME/); // Too long
+  });
+
+  it('should reject empty/null/undefined', () => {
+    assert.throws(() => validateRepoName(''), /REPO_NAME is required/);
+    assert.throws(() => validateRepoName(null), /REPO_NAME is required/);
+    assert.throws(() => validateRepoName(undefined), /REPO_NAME is required/);
+  });
+});
+
+// ============================================================================
+// validateGitSha Tests
+// ============================================================================
+
+describe('validateGitSha', () => {
+  it('should accept valid git SHAs', () => {
+    assert.strictEqual(validateGitSha('abc1234'), 'abc1234'); // Short SHA
+    assert.strictEqual(validateGitSha('abc1234def5678'), 'abc1234def5678');
+    assert.strictEqual(validateGitSha('a'.repeat(40)), 'a'.repeat(40)); // Full SHA
+    assert.strictEqual(validateGitSha('ABCDEF1234567890'), 'ABCDEF1234567890'); // Uppercase
+  });
+
+  it('should reject invalid SHAs', () => {
+    assert.throws(() => validateGitSha('abc123'), /Invalid SHA/); // Too short
+    assert.throws(() => validateGitSha('ghijkl1'), /Invalid SHA/); // Invalid hex chars
+    assert.throws(() => validateGitSha('a'.repeat(41)), /Invalid SHA/); // Too long
+  });
+
+  it('should reject empty/null/undefined', () => {
+    assert.throws(() => validateGitSha(''), /SHA is required/);
+    assert.throws(() => validateGitSha(null), /SHA is required/);
+    assert.throws(() => validateGitSha(undefined), /SHA is required/);
+  });
+
+  it('should use custom name in error messages', () => {
+    assert.throws(() => validateGitSha('', 'BASE_SHA'), /BASE_SHA is required/);
+    assert.throws(() => validateGitSha('invalid', 'HEAD_SHA'), /Invalid HEAD_SHA/);
   });
 });
 
