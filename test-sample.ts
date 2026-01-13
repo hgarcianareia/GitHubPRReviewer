@@ -21,7 +21,6 @@ async function fetchUserData(userId: string) {
 const API_KEY = "sk-1234567890abcdef";
 const DB_PASSWORD = "admin123";
 
-// Function without documentation
 function processData(input) {
   let result = [];
   for (let i = 0; i < input.length; i++) {
