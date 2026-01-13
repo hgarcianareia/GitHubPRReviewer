@@ -5,8 +5,8 @@
 enabled: true
 
 # Claude model to use for reviews
-# Options: claude-sonnet-4-20250514, claude-opus-4-20250514
-model: claude-sonnet-4-20250514
+# Options: claude-sonnet-4-5-20250929, claude-opus-4-5-20251101
+model: claude-sonnet-4-5-20250929
 
 # Maximum tokens for Claude's response
 maxTokens: 4096
