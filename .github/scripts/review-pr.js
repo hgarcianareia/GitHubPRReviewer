@@ -36,7 +36,7 @@ import path from 'path';
 
 const DEFAULT_CONFIG = {
   enabled: true,
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-4-5-20250929',
   maxTokens: 4096,
   reviewAreas: {
     codeQuality: true,

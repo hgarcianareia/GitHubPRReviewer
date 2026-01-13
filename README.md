@@ -58,7 +58,7 @@ Create or modify `.github/ai-review.yml` to customize the review:
 enabled: true
 
 # Claude model to use
-model: claude-sonnet-4-20250514
+model: claude-sonnet-4-5-20250929
 
 # Review focus areas
 reviewAreas:
@@ -188,7 +188,7 @@ This can happen when:
 
 ## API Usage and Costs
 
-- **Model**: Uses `claude-sonnet-4-20250514` by default (configurable)
+- **Model**: Uses `claude-sonnet-4-5-20250929` by default (configurable)
 - **Tokens**: Default max 4096 tokens per response
 - **Chunking**: Large diffs are split to avoid token limits
 - **Rate Limiting**: Built-in exponential backoff for rate limits
