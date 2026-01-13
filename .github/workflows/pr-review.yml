@@ -56,6 +56,16 @@ jobs:
             echo "config_exists=false" >> $GITHUB_OUTPUT
           fi
 
+      # Cache for storing reviewed commit SHAs
+      - name: Restore review cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .ai-review-cache
+          key: ai-review-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          restore-keys: |
+            ai-review-${{ github.event.pull_request.number }}-
+
       - name: Get PR diff
         id: diff
         env:
@@ -66,6 +76,12 @@ jobs:
 
           # Get list of changed files with their status
           gh pr view ${{ github.event.pull_request.number }} --json files -q '.files[].path' > changed_files.txt
+
+          # Get PR comments for threading detection
+          gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments > pr_comments.json || echo "[]" > pr_comments.json
+
+          # Get existing reviews to check for previous AI reviews
+          gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews > pr_reviews.json || echo "[]" > pr_reviews.json
 
           echo "diff_file=pr_diff.txt" >> $GITHUB_OUTPUT
           echo "files_list=changed_files.txt" >> $GITHUB_OUTPUT
@@ -84,8 +100,17 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CONFIG_EXISTS: ${{ steps.config.outputs.config_exists }}
+          GITHUB_EVENT_NAME: ${{ github.event.action }}
+          PR_COMMITS: ${{ github.event.pull_request.commits }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         run: |
           node .github/scripts/review-pr.js
+
+      - name: Save review cache
+        if: always()
+        run: |
+          mkdir -p .ai-review-cache
+          echo "${{ github.event.pull_request.head.sha }}" >> .ai-review-cache/reviewed-commits.txt
 
       - name: Handle review failure
         if: failure()
