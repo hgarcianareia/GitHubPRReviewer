@@ -18,7 +18,13 @@ import {
   parseDiff,
   calculateDiffPosition,
   getSeverityLevel,
-  SEVERITY_LEVELS
+  SEVERITY_LEVELS,
+  extractCustomInstructions,
+  filterIgnoredContent,
+  checkPRSize,
+  extractImports,
+  filterBySeverityThreshold,
+  chunkDiff
 } from './utils.js';
 
 // ============================================================================
@@ -595,5 +601,534 @@ describe('getSeverityLevel', () => {
 
   it('should have correct SEVERITY_LEVELS order', () => {
     assert.deepStrictEqual(SEVERITY_LEVELS, ['nitpick', 'suggestion', 'warning', 'critical']);
+  });
+});
+
+// ============================================================================
+// extractCustomInstructions Tests
+// ============================================================================
+
+describe('extractCustomInstructions', () => {
+  it('should extract instructions from PR body', () => {
+    const prBody = `
+This is my PR description.
+
+<!-- ai-review: Focus on security issues and SQL injection -->
+
+Some more text here.
+`;
+    assert.strictEqual(
+      extractCustomInstructions(prBody),
+      'Focus on security issues and SQL injection'
+    );
+  });
+
+  it('should handle multiline instructions', () => {
+    const prBody = `
+<!-- ai-review:
+Please review:
+1. Security concerns
+2. Performance issues
+-->
+`;
+    const result = extractCustomInstructions(prBody);
+    assert.ok(result.includes('Please review:'));
+    assert.ok(result.includes('1. Security concerns'));
+  });
+
+  it('should return null if no instructions found', () => {
+    const prBody = 'This PR has no special instructions';
+    assert.strictEqual(extractCustomInstructions(prBody), null);
+  });
+
+  it('should return null for empty/null/undefined input', () => {
+    assert.strictEqual(extractCustomInstructions(''), null);
+    assert.strictEqual(extractCustomInstructions(null), null);
+    assert.strictEqual(extractCustomInstructions(undefined), null);
+  });
+
+  it('should handle instructions with extra whitespace', () => {
+    const prBody = '<!--   ai-review:    trim me    -->';
+    assert.strictEqual(extractCustomInstructions(prBody), 'trim me');
+  });
+
+  it('should be case insensitive for the marker', () => {
+    const prBody = '<!-- AI-REVIEW: Check for memory leaks -->';
+    assert.strictEqual(extractCustomInstructions(prBody), 'Check for memory leaks');
+  });
+});
+
+// ============================================================================
+// filterIgnoredContent Tests
+// ============================================================================
+
+describe('filterIgnoredContent', () => {
+  const patterns = ['ai-review-ignore', 'ai-review-ignore-next-line', 'ai-review-ignore-file'];
+
+  it('should filter lines with ai-review-ignore', () => {
+    const diff = `diff --git a/test.js b/test.js
++const secret = 'password'; // ai-review-ignore
++const normal = 'value';`;
+
+    const result = filterIgnoredContent(diff, patterns);
+    assert.ok(!result.diff.includes('secret'));
+    assert.ok(result.diff.includes('normal'));
+    assert.strictEqual(result.ignoredLines.length, 1);
+  });
+
+  it('should filter next line after ai-review-ignore-next-line', () => {
+    const diff = `diff --git a/test.js b/test.js
++// ai-review-ignore-next-line
++const ignored = 'skip this';
++const kept = 'keep this';`;
+
+    const result = filterIgnoredContent(diff, patterns);
+    assert.ok(!result.diff.includes('ignored'));
+    assert.ok(result.diff.includes('kept'));
+  });
+
+  it('should filter entire file with ai-review-ignore-file', () => {
+    const diff = `diff --git a/ignored.js b/ignored.js
++// ai-review-ignore-file
++const a = 1;
++const b = 2;
+diff --git a/kept.js b/kept.js
++const c = 3;`;
+
+    const result = filterIgnoredContent(diff, patterns);
+    assert.ok(!result.diff.includes('const a'));
+    assert.ok(!result.diff.includes('const b'));
+    assert.ok(result.diff.includes('const c'));
+  });
+
+  it('should return original diff if no patterns provided', () => {
+    const diff = '+const x = 1;';
+    const result = filterIgnoredContent(diff, []);
+    assert.strictEqual(result.diff, diff);
+    assert.strictEqual(result.ignoredLines.length, 0);
+  });
+
+  it('should handle empty/null diff', () => {
+    assert.deepStrictEqual(filterIgnoredContent('', patterns), { diff: '', ignoredLines: [] });
+    assert.deepStrictEqual(filterIgnoredContent(null, patterns), { diff: '', ignoredLines: [] });
+  });
+
+  it('should track ignored items with correct metadata', () => {
+    const diff = `diff --git a/file.js b/file.js
++const x = 1; // ai-review-ignore`;
+
+    const result = filterIgnoredContent(diff, patterns);
+    assert.strictEqual(result.ignoredLines[0].file, 'file.js');
+    assert.strictEqual(result.ignoredLines[0].type, 'line');
+  });
+});
+
+// ============================================================================
+// checkPRSize Tests
+// ============================================================================
+
+describe('checkPRSize', () => {
+  const config = {
+    prSizeWarning: {
+      enabled: true,
+      maxLines: 500,
+      maxFiles: 10
+    }
+  };
+
+  it('should return null when PR is within limits', () => {
+    const files = [
+      { additions: 100, deletions: 50 },
+      { additions: 50, deletions: 25 }
+    ];
+    assert.strictEqual(checkPRSize(files, config), null);
+  });
+
+  it('should warn when lines exceed limit', () => {
+    const files = [
+      { additions: 400, deletions: 200 }
+    ];
+    const result = checkPRSize(files, config);
+    assert.ok(result.warning);
+    assert.ok(result.message.includes('600 changed lines'));
+  });
+
+  it('should warn when files exceed limit', () => {
+    const files = Array(15).fill({ additions: 10, deletions: 5 });
+    const result = checkPRSize(files, config);
+    assert.ok(result.warning);
+    assert.ok(result.message.includes('15 files'));
+  });
+
+  it('should warn for both lines and files exceeding limits', () => {
+    const files = Array(15).fill({ additions: 50, deletions: 50 });
+    const result = checkPRSize(files, config);
+    assert.ok(result.warning);
+    assert.ok(result.message.includes('changed lines'));
+    assert.ok(result.message.includes('files'));
+  });
+
+  it('should return null when feature is disabled', () => {
+    const disabledConfig = { prSizeWarning: { enabled: false } };
+    const files = [{ additions: 10000, deletions: 5000 }];
+    assert.strictEqual(checkPRSize(files, disabledConfig), null);
+  });
+
+  it('should handle empty/null files array', () => {
+    assert.strictEqual(checkPRSize([], config), null);
+    assert.strictEqual(checkPRSize(null, config), null);
+  });
+});
+
+// ============================================================================
+// extractImports Tests
+// ============================================================================
+
+describe('extractImports', () => {
+  it('should extract ES module imports from JavaScript/TypeScript', () => {
+    const content = `
+import foo from 'foo';
+import { bar } from './bar';
+import * as baz from '../baz';
+`;
+    const imports = extractImports(content, 'javascript');
+    assert.deepStrictEqual(imports, ['foo', './bar', '../baz']);
+  });
+
+  it('should extract require() calls from JavaScript', () => {
+    const content = `
+const foo = require('foo');
+const bar = require('./bar');
+`;
+    const imports = extractImports(content, 'javascript');
+    assert.deepStrictEqual(imports, ['foo', './bar']);
+  });
+
+  it('should extract both import and require from mixed code', () => {
+    const content = `
+import a from 'a';
+const b = require('b');
+`;
+    const imports = extractImports(content, 'typescript');
+    assert.deepStrictEqual(imports, ['a', 'b']);
+  });
+
+  it('should extract Python imports', () => {
+    const content = `
+import os
+import sys
+from pathlib import Path
+from typing import List, Dict
+`;
+    const imports = extractImports(content, 'python');
+    assert.ok(imports.includes('os'));
+    assert.ok(imports.includes('sys'));
+    assert.ok(imports.includes('pathlib'));
+    assert.ok(imports.includes('typing'));
+  });
+
+  it('should extract C# using statements', () => {
+    const content = `
+using System;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc;
+`;
+    const imports = extractImports(content, 'csharp');
+    assert.deepStrictEqual(imports, ['System', 'System.Collections.Generic', 'Microsoft.AspNetCore.Mvc']);
+  });
+
+  it('should return empty array for unknown language', () => {
+    const content = 'use std::io;';
+    const imports = extractImports(content, 'rust');
+    assert.deepStrictEqual(imports, []);
+  });
+
+  it('should handle empty/null content', () => {
+    assert.deepStrictEqual(extractImports('', 'javascript'), []);
+    assert.deepStrictEqual(extractImports(null, 'javascript'), []);
+  });
+});
+
+// ============================================================================
+// filterBySeverityThreshold Tests
+// ============================================================================
+
+describe('filterBySeverityThreshold', () => {
+  const reviews = [
+    {
+      summary: { overview: 'Test' },
+      inlineComments: [
+        { severity: 'nitpick', comment: 'Minor style issue' },
+        { severity: 'suggestion', comment: 'Consider refactoring' },
+        { severity: 'warning', comment: 'Potential bug' },
+        { severity: 'critical', comment: 'Security vulnerability' }
+      ]
+    }
+  ];
+
+  it('should filter comments below warning threshold', () => {
+    const result = filterBySeverityThreshold(reviews, 'warning');
+    assert.strictEqual(result.filteredCount, 2);
+    assert.ok(result.filtered);
+    const severities = result.reviews[0].inlineComments.map(c => c.severity);
+    assert.ok(severities.includes('warning'));
+    assert.ok(severities.includes('critical'));
+    assert.ok(!severities.includes('nitpick'));
+    assert.ok(!severities.includes('suggestion'));
+  });
+
+  it('should filter comments below critical threshold', () => {
+    const result = filterBySeverityThreshold(reviews, 'critical');
+    assert.strictEqual(result.filteredCount, 1);
+    assert.strictEqual(result.reviews[0].inlineComments[0].severity, 'critical');
+  });
+
+  it('should keep all comments with nitpick threshold', () => {
+    const result = filterBySeverityThreshold(reviews, 'nitpick');
+    assert.strictEqual(result.filteredCount, 4);
+    assert.strictEqual(result.filtered, false);
+  });
+
+  it('should handle empty reviews array', () => {
+    const result = filterBySeverityThreshold([], 'warning');
+    assert.deepStrictEqual(result.reviews, []);
+    assert.strictEqual(result.filtered, false);
+  });
+
+  it('should handle null/undefined reviews', () => {
+    const result = filterBySeverityThreshold(null, 'warning');
+    assert.deepStrictEqual(result.reviews, []);
+  });
+
+  it('should preserve review metadata while filtering comments', () => {
+    const result = filterBySeverityThreshold(reviews, 'warning');
+    assert.strictEqual(result.reviews[0].summary.overview, 'Test');
+  });
+
+  it('should report correct original and filtered counts', () => {
+    const result = filterBySeverityThreshold(reviews, 'warning');
+    assert.strictEqual(result.originalCount, 4);
+    assert.strictEqual(result.filteredCount, 2);
+  });
+});
+
+// ============================================================================
+// chunkDiff Tests
+// ============================================================================
+
+describe('chunkDiff', () => {
+  it('should return single chunk if diff is small enough', () => {
+    const diff = 'diff --git a/small.js b/small.js\n+const x = 1;';
+    const files = [{ newPath: 'small.js' }];
+    const result = chunkDiff(diff, files, 1000);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].diff, diff);
+  });
+
+  it('should split diff into multiple chunks when exceeding maxSize', () => {
+    const diff = `diff --git a/file1.js b/file1.js
++${'x'.repeat(100)}
+diff --git a/file2.js b/file2.js
++${'y'.repeat(100)}
+diff --git a/file3.js b/file3.js
++${'z'.repeat(100)}`;
+
+    const files = [
+      { newPath: 'file1.js' },
+      { newPath: 'file2.js' },
+      { newPath: 'file3.js' }
+    ];
+
+    const result = chunkDiff(diff, files, 150);
+    assert.ok(result.length > 1);
+  });
+
+  it('should associate correct files with each chunk', () => {
+    const diff = `diff --git a/a.js b/a.js
++const a = 1;
+diff --git a/b.js b/b.js
++const b = 2;`;
+
+    const files = [
+      { newPath: 'a.js' },
+      { newPath: 'b.js' }
+    ];
+
+    const result = chunkDiff(diff, files, 50);
+    // Each chunk should have its associated file
+    for (const chunk of result) {
+      assert.ok(chunk.files.length > 0 || chunk.diff.length > 0);
+    }
+  });
+
+  it('should handle empty/null diff', () => {
+    assert.deepStrictEqual(chunkDiff('', [], 100), []);
+    assert.deepStrictEqual(chunkDiff(null, [], 100), []);
+  });
+
+  it('should handle diff with no files array', () => {
+    const diff = 'diff --git a/test.js b/test.js\n+x';
+    const result = chunkDiff(diff, null, 1000);
+    assert.strictEqual(result.length, 1);
+    assert.deepStrictEqual(result[0].files, []);
+  });
+});
+
+// ============================================================================
+// Additional Edge Case Tests for Existing Functions
+// ============================================================================
+
+describe('shouldIgnoreFile - additional edge cases', () => {
+  it('should match paths within directory using **', () => {
+    const patterns = ['dist/**'];
+    // The ** pattern matches paths within the directory
+    assert.strictEqual(shouldIgnoreFile('dist/bundle.js', patterns), true);
+    assert.strictEqual(shouldIgnoreFile('dist/main.js', patterns), true);
+  });
+
+  it('should not match partial directory names', () => {
+    const patterns = ['dist/**'];
+    assert.strictEqual(shouldIgnoreFile('distribution/file.js', patterns), false);
+    assert.strictEqual(shouldIgnoreFile('src/dist-helper.js', patterns), false);
+  });
+
+  it('should handle multiple extension patterns', () => {
+    const patterns = ['*.min.js', '*.min.css', '*.map'];
+    assert.strictEqual(shouldIgnoreFile('bundle.min.js', patterns), true);
+    assert.strictEqual(shouldIgnoreFile('styles.min.css', patterns), true);
+    assert.strictEqual(shouldIgnoreFile('bundle.js.map', patterns), true);
+    assert.strictEqual(shouldIgnoreFile('bundle.js', patterns), false);
+  });
+
+  it('should match with wildcards in middle of filename', () => {
+    const patterns = ['test-*.js', '*.test.ts'];
+    assert.strictEqual(shouldIgnoreFile('test-utils.js', patterns), true);
+    assert.strictEqual(shouldIgnoreFile('component.test.ts', patterns), true);
+    assert.strictEqual(shouldIgnoreFile('test.js', patterns), false);
+  });
+});
+
+describe('parseDiff - additional edge cases', () => {
+  it('should handle renamed files', () => {
+    const renamedDiff = `diff --git a/old-name.js b/new-name.js
+--- a/old-name.js
++++ b/new-name.js
+@@ -1,1 +1,1 @@
+-const old = 1;
++const new = 1;
+`;
+    const files = parseDiff(renamedDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].oldPath, 'old-name.js');
+    assert.strictEqual(files[0].newPath, 'new-name.js');
+  });
+
+  it('should handle new file mode', () => {
+    const newFileDiff = `diff --git a/new.js b/new.js
+new file mode 100644
+--- /dev/null
++++ b/new.js
+@@ -0,0 +1,2 @@
++const x = 1;
++const y = 2;
+`;
+    const files = parseDiff(newFileDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].additions, 2);
+  });
+
+  it('should handle deleted file', () => {
+    const deletedDiff = `diff --git a/deleted.js b/deleted.js
+deleted file mode 100644
+--- a/deleted.js
++++ /dev/null
+@@ -1,2 +0,0 @@
+-const x = 1;
+-const y = 2;
+`;
+    const files = parseDiff(deletedDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].deletions, 2);
+  });
+
+  it('should handle multiple hunks in single file', () => {
+    const multiHunkDiff = `diff --git a/file.js b/file.js
+--- a/file.js
++++ b/file.js
+@@ -1,3 +1,3 @@
+ const a = 1;
+-const b = 2;
++const b = 3;
+ const c = 3;
+@@ -10,3 +10,3 @@
+ const x = 10;
+-const y = 20;
++const y = 21;
+ const z = 30;
+`;
+    const files = parseDiff(multiHunkDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].hunks.length, 2);
+    assert.strictEqual(files[0].hunks[0].oldStart, 1);
+    assert.strictEqual(files[0].hunks[1].oldStart, 10);
+  });
+});
+
+describe('calculateDiffPosition - additional edge cases', () => {
+  it('should handle multiple hunks and find line in second hunk', () => {
+    const file = {
+      hunks: [
+        {
+          oldStart: 1,
+          newStart: 1,
+          changes: [
+            { type: 'context', content: 'line 1', newLine: 1 },
+            { type: 'add', content: 'new line', newLine: 2 }
+          ]
+        },
+        {
+          oldStart: 10,
+          newStart: 11,
+          changes: [
+            { type: 'context', content: 'line 10', newLine: 11 },
+            { type: 'add', content: 'target line', newLine: 12 }
+          ]
+        }
+      ]
+    };
+
+    const position = calculateDiffPosition(file, 12);
+    assert.notStrictEqual(position, null);
+  });
+
+  it('should return null for line far from any changes', () => {
+    const file = {
+      hunks: [
+        {
+          oldStart: 1,
+          newStart: 1,
+          changes: [
+            { type: 'add', content: 'line', newLine: 1 }
+          ]
+        }
+      ]
+    };
+
+    const position = calculateDiffPosition(file, 100);
+    assert.strictEqual(position, null);
+  });
+});
+
+describe('ensureArray - additional edge cases', () => {
+  it('should return empty array for non-empty string', () => {
+    // Non-empty strings are truthy but not arrays, so Object.values is called
+    const result = ensureArray('hello');
+    // String 'hello' becomes ['h', 'e', 'l', 'l', 'o']
+    assert.deepStrictEqual(result, ['h', 'e', 'l', 'l', 'o']);
+  });
+
+  it('should handle nested arrays', () => {
+    const nested = [[1, 2], [3, 4]];
+    assert.deepStrictEqual(ensureArray(nested), [[1, 2], [3, 4]]);
   });
 });

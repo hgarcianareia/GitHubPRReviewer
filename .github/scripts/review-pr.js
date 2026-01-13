@@ -43,7 +43,13 @@ import {
   parseDiff,
   calculateDiffPosition,
   getSeverityLevel,
-  SEVERITY_LEVELS
+  SEVERITY_LEVELS,
+  extractCustomInstructions,
+  filterIgnoredContent,
+  checkPRSize,
+  extractImports,
+  filterBySeverityThreshold,
+  chunkDiff
 } from './lib/utils.js';
 
 // ============================================================================
@@ -328,24 +334,18 @@ async function isCommitAlreadyReviewed(config) {
 // ============================================================================
 
 /**
- * Extract custom review instructions from PR description
+ * Extract custom review instructions from PR description (wrapper)
  */
-function extractCustomInstructions(config) {
+function getCustomInstructions(config) {
   if (!config.customInstructions?.enabled) {
     return null;
   }
 
-  const prBody = context.prBody || '';
-
-  // Look for <!-- ai-review: instructions here -->
-  const match = prBody.match(/<!--\s*ai-review:\s*(.*?)\s*-->/is);
-  if (match) {
-    const instructions = match[1].trim();
+  const instructions = extractCustomInstructions(context.prBody || '');
+  if (instructions) {
     log('info', 'Found custom review instructions', { instructions });
-    return instructions;
   }
-
-  return null;
+  return instructions;
 }
 
 // ============================================================================
@@ -353,101 +353,22 @@ function extractCustomInstructions(config) {
 // ============================================================================
 
 /**
- * Filter out lines/files with ignore comments
+ * Filter out lines/files with ignore comments (wrapper)
  */
-function filterIgnoredContent(diff, config) {
+function filterIgnoredContentWithConfig(diff, config) {
   if (!config.inlineIgnore?.enabled) {
     return { diff, ignoredLines: [] };
   }
 
   const patterns = config.inlineIgnore.patterns || [];
-  const lines = diff.split('\n');
-  const filteredLines = [];
-  const ignoredLines = [];
-  let ignoreNextLine = false;
-  let ignoreFile = false;
-  let currentFile = null;
-
-  for (const line of lines) {
-    // Track current file
-    if (line.startsWith('diff --git')) {
-      const match = line.match(/diff --git a\/(.*) b\/(.*)/);
-      currentFile = match ? match[2] : null;
-      ignoreFile = false;
-    }
-
-    // Check for ignore patterns
-    const hasIgnore = patterns.some(p => line.includes(p));
-
-    if (hasIgnore) {
-      if (line.includes('ai-review-ignore-file')) {
-        ignoreFile = true;
-        ignoredLines.push({ file: currentFile, type: 'file' });
-        continue;
-      }
-      if (line.includes('ai-review-ignore-next-line')) {
-        ignoreNextLine = true;
-        continue;
-      }
-      if (line.includes('ai-review-ignore')) {
-        ignoredLines.push({ file: currentFile, line: line, type: 'line' });
-        continue;
-      }
-    }
-
-    if (ignoreFile) {
-      continue;
-    }
-
-    if (ignoreNextLine && line.startsWith('+')) {
-      ignoreNextLine = false;
-      ignoredLines.push({ file: currentFile, line: line, type: 'next-line' });
-      continue;
-    }
-
-    filteredLines.push(line);
-  }
-
-  return {
-    diff: filteredLines.join('\n'),
-    ignoredLines
-  };
+  return filterIgnoredContent(diff, patterns);
 }
 
 // ============================================================================
 // Feature: PR Size Warning
 // ============================================================================
 
-/**
- * Check PR size and generate warning if too large
- */
-function checkPRSize(parsedFiles, config) {
-  if (!config.prSizeWarning?.enabled) {
-    return null;
-  }
-
-  const totalLines = parsedFiles.reduce((sum, f) => sum + f.additions + f.deletions, 0);
-  const totalFiles = parsedFiles.length;
-
-  const warnings = [];
-
-  if (totalLines > config.prSizeWarning.maxLines) {
-    warnings.push(`This PR has **${totalLines} changed lines**, which exceeds the recommended maximum of ${config.prSizeWarning.maxLines} lines.`);
-  }
-
-  if (totalFiles > config.prSizeWarning.maxFiles) {
-    warnings.push(`This PR modifies **${totalFiles} files**, which exceeds the recommended maximum of ${config.prSizeWarning.maxFiles} files.`);
-  }
-
-  if (warnings.length > 0) {
-    return {
-      warning: true,
-      message: `### ⚠️ PR Size Warning\n\n${warnings.join('\n\n')}\n\n**Recommendation**: Consider splitting this PR into smaller, focused changes for easier review and safer merging.`
-    };
-  }
-
-  return null;
-}
+// checkPRSize is now imported from utils.js
 
 // ============================================================================
 // Feature: Comment Threading
@@ -687,43 +608,7 @@ async function writeFeedbackSummary(feedback, config) {
 // Feature: Contextual Awareness
 // ============================================================================
 
-/**
- * Extract import statements from file content
- */
-function extractImports(content, language) {
-  const imports = [];
-
-  if (language === 'typescript' || language === 'javascript') {
-    // Match: import ... from '...'
-    const importMatches = content.matchAll(/import\s+.*?\s+from\s+['"]([^'"]+)['"]/g);
-    for (const match of importMatches) {
-      imports.push(match[1]);
-    }
-    // Match: require('...')
-    const requireMatches = content.matchAll(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g);
-    for (const match of requireMatches) {
-      imports.push(match[1]);
-    }
-  } else if (language === 'python') {
-    // Match: from X import Y or import X
-    const fromMatches = content.matchAll(/from\s+([^\s]+)\s+import/g);
-    for (const match of fromMatches) {
-      imports.push(match[1]);
-    }
-    const importMatches = content.matchAll(/^import\s+([^\s,]+)/gm);
-    for (const match of importMatches) {
-      imports.push(match[1]);
-    }
-  } else if (language === 'csharp') {
-    // Match: using X;
-    const usingMatches = content.matchAll(/using\s+([^;]+);/g);
-    for (const match of usingMatches) {
-      imports.push(match[1]);
-    }
-  }
-
-  return imports;
-}
+// extractImports is now imported from utils.js
 
 /**
  * Resolve import path to actual file path
@@ -1010,41 +895,19 @@ Please review these changes carefully before merging.
 // ============================================================================
 
 /**
- * Filter comments based on severity threshold
+ * Filter comments based on severity threshold (wrapper with config)
  */
-function filterBySeverityThreshold(reviews, config) {
+function filterBySeverityThresholdWithConfig(reviews, config) {
   if (!config.severityThreshold?.enabled) {
     return { reviews, filtered: false };
   }
 
-  const minLevel = getSeverityLevel(config.severityThreshold.minSeverityToComment || 'warning');
+  const minSeverity = config.severityThreshold.minSeverityToComment || 'warning';
+  const result = filterBySeverityThreshold(reviews, minSeverity);
 
-  const filteredReviews = reviews.map(review => ({
-    ...review,
-    inlineComments: (review.inlineComments || []).filter(
-      comment => getSeverityLevel(comment.severity) >= minLevel
-    )
-  }));
+  log('info', `Severity threshold filter: ${result.originalCount} -> ${result.filteredCount} comments`);
 
-  // Count remaining comments
-  const totalRemaining = filteredReviews.reduce(
-    (sum, r) => sum + (r.inlineComments?.length || 0),
-    0
-  );
-
-  const originalTotal = reviews.reduce(
-    (sum, r) => sum + (r.inlineComments?.length || 0),
-    0
-  );
-
-  log('info', `Severity threshold filter: ${originalTotal} -> ${totalRemaining} comments`);
-
-  return {
-    reviews: filteredReviews,
-    filtered: totalRemaining < originalTotal,
-    originalCount: originalTotal,
-    filteredCount: totalRemaining
-  };
+  return result;
 }
 
 /**
@@ -1316,39 +1179,14 @@ async function reviewWithClaude(config, files, diff, customInstructions, related
   }
 }
 
-function chunkDiff(diff, files, maxSize) {
+function chunkDiffWithLogging(diff, files, maxSize) {
   if (diff.length <= maxSize) {
     return [{ diff, files }];
   }
 
   log('info', `Diff too large (${diff.length} chars), chunking...`);
 
-  const chunks = [];
-  let currentChunk = { diff: '', files: [] };
-
-  const filePattern = /^diff --git/m;
-  const fileDiffs = diff.split(filePattern).slice(1).map(d => 'diff --git' + d);
-
-  for (let i = 0; i < fileDiffs.length; i++) {
-    const fileDiff = fileDiffs[i];
-    const file = files[i];
-
-    if (currentChunk.diff.length + fileDiff.length > maxSize) {
-      if (currentChunk.diff) {
-        chunks.push(currentChunk);
-      }
-      currentChunk = { diff: '', files: [] };
-    }
-
-    currentChunk.diff += fileDiff;
-    if (file) {
-      currentChunk.files.push(file);
-    }
-  }
-
-  if (currentChunk.diff) {
-    chunks.push(currentChunk);
-  }
+  const chunks = chunkDiff(diff, files, maxSize);
 
   log('info', `Split into ${chunks.length} chunks`);
   return chunks;
@@ -1652,7 +1490,7 @@ async function main() {
     log('info', `Processing ${changedFiles.length} changed files`);
 
     // Feature: Filter ignored content
-    const { diff: filteredDiffContent, ignoredLines } = filterIgnoredContent(rawDiff, config);
+    const { diff: filteredDiffContent, ignoredLines } = filterIgnoredContentWithConfig(rawDiff, config);
     if (ignoredLines.length > 0) {
       log('info', `Filtered ${ignoredLines.length} ignored lines/files`);
     }
@@ -1707,7 +1545,7 @@ async function main() {
     }).join('');
 
     // Feature: Get custom instructions
-    const customInstructions = extractCustomInstructions(config);
+    const customInstructions = getCustomInstructions(config);
 
     // Feature: Contextual Awareness - get related files
     const relatedFiles = await getRelatedFiles(limitedFiles, config);
@@ -1716,7 +1554,7 @@ async function main() {
     const previousFeedback = await getReviewFeedback(config);
 
     // Chunk if necessary and review
-    const chunks = chunkDiff(filteredDiff, limitedFiles, config.chunkSize);
+    const chunks = chunkDiffWithLogging(filteredDiff, limitedFiles, config.chunkSize);
     const reviews = [];
 
     for (let i = 0; i < chunks.length; i++) {
@@ -1744,7 +1582,7 @@ async function main() {
     }
 
     // Feature: Severity Threshold - filter comments by severity
-    const { reviews: filteredReviews } = filterBySeverityThreshold(reviews, config);
+    const { reviews: filteredReviews } = filterBySeverityThresholdWithConfig(reviews, config);
 
     // Feature: Check if previous issues were resolved
     const resolvedIssues = await checkAndDismissStaleReviews(config, filteredReviews);

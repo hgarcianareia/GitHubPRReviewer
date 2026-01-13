@@ -372,3 +372,258 @@ export const SEVERITY_LEVELS = ['nitpick', 'suggestion', 'warning', 'critical'];
 export function getSeverityLevel(severity) {
   return SEVERITY_LEVELS.indexOf(severity);
 }
+
+/**
+ * Extract custom review instructions from PR description
+ * Looks for <!-- ai-review: instructions here --> pattern
+ * @param {string} prBody - The PR description body
+ * @returns {string|null} - The custom instructions or null if not found
+ */
+export function extractCustomInstructions(prBody) {
+  if (!prBody || typeof prBody !== 'string') {
+    return null;
+  }
+
+  // Look for <!-- ai-review: instructions here -->
+  const match = prBody.match(/<!--\s*ai-review:\s*(.*?)\s*-->/is);
+  if (match) {
+    return match[1].trim();
+  }
+
+  return null;
+}
+
+/**
+ * Filter out lines/files with ignore comments from diff
+ * @param {string} diff - The diff content
+ * @param {string[]} patterns - Array of ignore patterns to look for
+ * @returns {Object} - { diff: filteredDiff, ignoredLines: array of ignored items }
+ */
+export function filterIgnoredContent(diff, patterns) {
+  if (!diff || typeof diff !== 'string') {
+    return { diff: '', ignoredLines: [] };
+  }
+
+  if (!patterns || !Array.isArray(patterns) || patterns.length === 0) {
+    return { diff, ignoredLines: [] };
+  }
+
+  const lines = diff.split('\n');
+  const filteredLines = [];
+  const ignoredLines = [];
+  let ignoreNextLine = false;
+  let ignoreFile = false;
+  let currentFile = null;
+
+  for (const line of lines) {
+    // Track current file
+    if (line.startsWith('diff --git')) {
+      const match = line.match(/diff --git a\/(.*) b\/(.*)/);
+      currentFile = match ? match[2] : null;
+      ignoreFile = false;
+    }
+
+    // Check for ignore patterns
+    const hasIgnore = patterns.some(p => line.includes(p));
+
+    if (hasIgnore) {
+      if (line.includes('ai-review-ignore-file')) {
+        ignoreFile = true;
+        ignoredLines.push({ file: currentFile, type: 'file' });
+        continue;
+      }
+      if (line.includes('ai-review-ignore-next-line')) {
+        ignoreNextLine = true;
+        continue;
+      }
+      if (line.includes('ai-review-ignore')) {
+        ignoredLines.push({ file: currentFile, line: line, type: 'line' });
+        continue;
+      }
+    }
+
+    if (ignoreFile) {
+      continue;
+    }
+
+    if (ignoreNextLine && line.startsWith('+')) {
+      ignoreNextLine = false;
+      ignoredLines.push({ file: currentFile, line: line, type: 'next-line' });
+      continue;
+    }
+
+    filteredLines.push(line);
+  }
+
+  return {
+    diff: filteredLines.join('\n'),
+    ignoredLines
+  };
+}
+
+/**
+ * Check PR size and generate warning if too large
+ * @param {Array} parsedFiles - Array of parsed file objects from parseDiff
+ * @param {Object} config - Configuration with prSizeWarning settings
+ * @returns {Object|null} - Warning object or null if no warning
+ */
+export function checkPRSize(parsedFiles, config) {
+  if (!config?.prSizeWarning?.enabled) {
+    return null;
+  }
+
+  if (!parsedFiles || !Array.isArray(parsedFiles)) {
+    return null;
+  }
+
+  const totalLines = parsedFiles.reduce((sum, f) => sum + (f.additions || 0) + (f.deletions || 0), 0);
+  const totalFiles = parsedFiles.length;
+
+  const warnings = [];
+
+  if (totalLines > (config.prSizeWarning.maxLines || Infinity)) {
+    warnings.push(`This PR has **${totalLines} changed lines**, which exceeds the recommended maximum of ${config.prSizeWarning.maxLines} lines.`);
+  }
+
+  if (totalFiles > (config.prSizeWarning.maxFiles || Infinity)) {
+    warnings.push(`This PR modifies **${totalFiles} files**, which exceeds the recommended maximum of ${config.prSizeWarning.maxFiles} files.`);
+  }
+
+  if (warnings.length > 0) {
+    return {
+      warning: true,
+      message: `### ⚠️ PR Size Warning\n\n${warnings.join('\n\n')}\n\n**Recommendation**: Consider splitting this PR into smaller, focused changes for easier review and safer merging.`
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Extract import statements from file content
+ * @param {string} content - The file content
+ * @param {string} language - The programming language
+ * @returns {string[]} - Array of import paths
+ */
+export function extractImports(content, language) {
+  if (!content || typeof content !== 'string') {
+    return [];
+  }
+
+  const imports = [];
+
+  if (language === 'typescript' || language === 'javascript') {
+    // Match: import ... from '...'
+    const importMatches = content.matchAll(/import\s+.*?\s+from\s+['"]([^'"]+)['"]/g);
+    for (const match of importMatches) {
+      imports.push(match[1]);
+    }
+    // Match: require('...')
+    const requireMatches = content.matchAll(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g);
+    for (const match of requireMatches) {
+      imports.push(match[1]);
+    }
+  } else if (language === 'python') {
+    // Match: from X import Y or import X
+    const fromMatches = content.matchAll(/from\s+([^\s]+)\s+import/g);
+    for (const match of fromMatches) {
+      imports.push(match[1]);
+    }
+    const importMatches = content.matchAll(/^import\s+([^\s,]+)/gm);
+    for (const match of importMatches) {
+      imports.push(match[1]);
+    }
+  } else if (language === 'csharp') {
+    // Match: using X;
+    const usingMatches = content.matchAll(/using\s+([^;]+);/g);
+    for (const match of usingMatches) {
+      imports.push(match[1]);
+    }
+  }
+
+  return imports;
+}
+
+/**
+ * Filter reviews/comments based on severity threshold
+ * @param {Array} reviews - Array of review objects with inlineComments
+ * @param {string} minSeverity - Minimum severity to include ('nitpick', 'suggestion', 'warning', 'critical')
+ * @returns {Object} - { reviews: filtered reviews, filtered: boolean, originalCount, filteredCount }
+ */
+export function filterBySeverityThreshold(reviews, minSeverity) {
+  if (!reviews || !Array.isArray(reviews)) {
+    return { reviews: [], filtered: false, originalCount: 0, filteredCount: 0 };
+  }
+
+  const minLevel = getSeverityLevel(minSeverity || 'nitpick');
+
+  const filteredReviews = reviews.map(review => ({
+    ...review,
+    inlineComments: (review.inlineComments || []).filter(
+      comment => getSeverityLevel(comment.severity) >= minLevel
+    )
+  }));
+
+  const totalRemaining = filteredReviews.reduce(
+    (sum, r) => sum + (r.inlineComments?.length || 0),
+    0
+  );
+
+  const originalTotal = reviews.reduce(
+    (sum, r) => sum + (r.inlineComments?.length || 0),
+    0
+  );
+
+  return {
+    reviews: filteredReviews,
+    filtered: totalRemaining < originalTotal,
+    originalCount: originalTotal,
+    filteredCount: totalRemaining
+  };
+}
+
+/**
+ * Chunk a diff into smaller pieces for API calls
+ * @param {string} diff - The full diff content
+ * @param {Array} files - Array of parsed file objects
+ * @param {number} maxSize - Maximum chunk size in characters
+ * @returns {Array} - Array of { diff, files } chunks
+ */
+export function chunkDiff(diff, files, maxSize) {
+  if (!diff || typeof diff !== 'string') {
+    return [];
+  }
+
+  if (diff.length <= maxSize) {
+    return [{ diff, files: files || [] }];
+  }
+
+  const chunks = [];
+  let currentChunk = { diff: '', files: [] };
+
+  const filePattern = /^diff --git/m;
+  const fileDiffs = diff.split(filePattern).slice(1).map(d => 'diff --git' + d);
+
+  for (let i = 0; i < fileDiffs.length; i++) {
+    const fileDiff = fileDiffs[i];
+    const file = files ? files[i] : null;
+
+    if (currentChunk.diff.length + fileDiff.length > maxSize) {
+      if (currentChunk.diff) {
+        chunks.push(currentChunk);
+      }
+      currentChunk = { diff: '', files: [] };
+    }
+
+    currentChunk.diff += fileDiff;
+    if (file) {
+      currentChunk.files.push(file);
+    }
+  }
+
+  if (currentChunk.diff) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
