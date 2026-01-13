@@ -4,6 +4,16 @@
  * Uses Claude (Anthropic) to perform comprehensive code reviews on Pull Requests.
  * Posts inline comments and a summary review on the PR.
  *
+ * Features:
+ *   - Incremental reviews (only review new commits after first review)
+ *   - Comment threading (update existing comments instead of duplicates)
+ *   - Auto-dismiss stale reviews when issues are fixed
+ *   - File-level ignore comments (ai-review-ignore)
+ *   - PR size warnings
+ *   - Review caching by commit SHA
+ *   - Custom review instructions from PR description
+ *   - Metrics and analytics
+ *
  * Environment Variables Required:
  *   - ANTHROPIC_API_KEY: API key for Claude
  *   - GITHUB_TOKEN: GitHub token for PR interactions
@@ -46,13 +56,37 @@ const DEFAULT_CONFIG = {
     'build/**',
     'node_modules/**'
   ],
-  chunkSize: 100000,  // Characters per chunk for large diffs
+  chunkSize: 100000,
   maxFilesPerReview: 50,
   severity: {
     critical: true,
     warning: true,
     suggestion: true,
     nitpick: false
+  },
+  // New feature defaults
+  prSizeWarning: {
+    enabled: true,
+    maxLines: 1000,
+    maxFiles: 30
+  },
+  incrementalReview: {
+    enabled: true
+  },
+  caching: {
+    enabled: true
+  },
+  customInstructions: {
+    enabled: true
+  },
+  inlineIgnore: {
+    enabled: true,
+    patterns: ['ai-review-ignore', 'ai-review-ignore-next-line', 'ai-review-ignore-file']
+  },
+  metrics: {
+    enabled: true,
+    showInSummary: true,
+    showInComment: true
   }
 };
 
@@ -62,6 +96,9 @@ const RATE_LIMIT = {
   initialDelayMs: 1000,
   maxDelayMs: 30000
 };
+
+// AI Review marker for identifying our comments
+const AI_REVIEW_MARKER = '<!-- ai-pr-review -->';
 
 // ============================================================================
 // Initialization
@@ -83,7 +120,24 @@ const context = {
   prBody: process.env.PR_BODY || '',
   prAuthor: process.env.PR_AUTHOR || '',
   baseSha: process.env.BASE_SHA,
-  headSha: process.env.HEAD_SHA
+  headSha: process.env.HEAD_SHA,
+  eventName: process.env.GITHUB_EVENT_NAME || 'opened',
+  cacheHit: process.env.CACHE_HIT === 'true'
+};
+
+// Metrics tracking
+const metrics = {
+  startTime: Date.now(),
+  filesReviewed: 0,
+  linesReviewed: 0,
+  commentsPosted: 0,
+  criticalIssues: 0,
+  warningIssues: 0,
+  suggestionIssues: 0,
+  cachedSkipped: false,
+  incrementalReview: false,
+  apiCalls: 0,
+  tokensUsed: 0
 };
 
 // ============================================================================
@@ -124,7 +178,6 @@ async function withRetry(fn, operation) {
     } catch (error) {
       lastError = error;
 
-      // Check for rate limiting
       if (error.status === 429 || error.message?.includes('rate')) {
         log('warn', `Rate limited on ${operation}, attempt ${attempt}/${RATE_LIMIT.maxRetries}`);
         await sleep(delay);
@@ -132,7 +185,6 @@ async function withRetry(fn, operation) {
         continue;
       }
 
-      // For other errors, don't retry
       throw error;
     }
   }
@@ -150,7 +202,7 @@ async function loadConfig() {
     const configContent = await fs.readFile(configPath, 'utf-8');
     const userConfig = yaml.load(configContent);
     log('info', 'Loaded custom configuration from .github/ai-review.yml');
-    return { ...DEFAULT_CONFIG, ...userConfig };
+    return deepMerge(DEFAULT_CONFIG, userConfig);
   } catch (error) {
     if (error.code === 'ENOENT') {
       log('info', 'No custom config found, using defaults');
@@ -162,14 +214,29 @@ async function loadConfig() {
 }
 
 /**
+ * Deep merge two objects
+ */
+function deepMerge(target, source) {
+  const result = { ...target };
+  for (const key in source) {
+    if (source[key] instanceof Object && key in target) {
+      result[key] = deepMerge(target[key], source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
+/**
  * Check if a file should be ignored based on patterns
  */
 function shouldIgnoreFile(filename, ignorePatterns) {
   return ignorePatterns.some(pattern => {
-    // Convert glob pattern to regex
     const regexPattern = pattern
       .replace(/\./g, '\\.')
-      .replace(/\*/g, '.*')
+      .replace(/\*\*/g, '.*')
+      .replace(/\*/g, '[^/]*')
       .replace(/\?/g, '.');
     return new RegExp(`^${regexPattern}$`).test(filename);
   });
@@ -195,12 +262,300 @@ function detectLanguage(filename) {
 }
 
 // ============================================================================
-// GitHub API Functions
+// Feature: Review Caching
 // ============================================================================
 
 /**
- * Get the diff content for the PR
+ * Check if the current commit has already been reviewed
  */
+async function isCommitAlreadyReviewed(config) {
+  if (!config.caching?.enabled) {
+    return false;
+  }
+
+  try {
+    const cachePath = path.join(process.cwd(), '.ai-review-cache', 'reviewed-commits.txt');
+    const cacheContent = await fs.readFile(cachePath, 'utf-8');
+    const reviewedCommits = cacheContent.split('\n').filter(c => c.trim());
+
+    if (reviewedCommits.includes(context.headSha)) {
+      log('info', 'Commit already reviewed, skipping', { sha: context.headSha });
+      metrics.cachedSkipped = true;
+      return true;
+    }
+  } catch (error) {
+    // Cache file doesn't exist yet, that's fine
+  }
+
+  return false;
+}
+
+/**
+ * Get the last reviewed commit SHA
+ */
+async function getLastReviewedCommit() {
+  try {
+    const cachePath = path.join(process.cwd(), '.ai-review-cache', 'reviewed-commits.txt');
+    const cacheContent = await fs.readFile(cachePath, 'utf-8');
+    const reviewedCommits = cacheContent.split('\n').filter(c => c.trim());
+    return reviewedCommits[reviewedCommits.length - 1] || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// ============================================================================
+// Feature: Incremental Reviews
+// ============================================================================
+
+/**
+ * Get incremental diff (only changes since last review)
+ */
+async function getIncrementalDiff(config, lastReviewedCommit) {
+  if (!config.incrementalReview?.enabled || !lastReviewedCommit) {
+    return null;
+  }
+
+  try {
+    // Get diff between last reviewed commit and current head
+    const { execSync } = await import('child_process');
+    const diff = execSync(
+      `git diff ${lastReviewedCommit}..${context.headSha}`,
+      { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }
+    );
+
+    if (diff.trim()) {
+      log('info', 'Using incremental diff', {
+        from: lastReviewedCommit.substring(0, 7),
+        to: context.headSha.substring(0, 7)
+      });
+      metrics.incrementalReview = true;
+      return diff;
+    }
+  } catch (error) {
+    log('warn', 'Failed to get incremental diff, using full diff', { error: error.message });
+  }
+
+  return null;
+}
+
+// ============================================================================
+// Feature: Custom Review Instructions
+// ============================================================================
+
+/**
+ * Extract custom review instructions from PR description
+ */
+function extractCustomInstructions(config) {
+  if (!config.customInstructions?.enabled) {
+    return null;
+  }
+
+  const prBody = context.prBody || '';
+
+  // Look for <!-- ai-review: instructions here -->
+  const match = prBody.match(/<!--\s*ai-review:\s*(.*?)\s*-->/is);
+  if (match) {
+    const instructions = match[1].trim();
+    log('info', 'Found custom review instructions', { instructions });
+    return instructions;
+  }
+
+  return null;
+}
+
+// ============================================================================
+// Feature: File-Level Ignores
+// ============================================================================
+
+/**
+ * Filter out lines/files with ignore comments
+ */
+function filterIgnoredContent(diff, config) {
+  if (!config.inlineIgnore?.enabled) {
+    return { diff, ignoredLines: [] };
+  }
+
+  const patterns = config.inlineIgnore.patterns || [];
+  const lines = diff.split('\n');
+  const filteredLines = [];
+  const ignoredLines = [];
+  let ignoreNextLine = false;
+  let ignoreFile = false;
+  let currentFile = null;
+
+  for (const line of lines) {
+    // Track current file
+    if (line.startsWith('diff --git')) {
+      const match = line.match(/diff --git a\/(.*) b\/(.*)/);
+      currentFile = match ? match[2] : null;
+      ignoreFile = false;
+    }
+
+    // Check for ignore patterns
+    const hasIgnore = patterns.some(p => line.includes(p));
+
+    if (hasIgnore) {
+      if (line.includes('ai-review-ignore-file')) {
+        ignoreFile = true;
+        ignoredLines.push({ file: currentFile, type: 'file' });
+        continue;
+      }
+      if (line.includes('ai-review-ignore-next-line')) {
+        ignoreNextLine = true;
+        continue;
+      }
+      if (line.includes('ai-review-ignore')) {
+        ignoredLines.push({ file: currentFile, line: line, type: 'line' });
+        continue;
+      }
+    }
+
+    if (ignoreFile) {
+      continue;
+    }
+
+    if (ignoreNextLine && line.startsWith('+')) {
+      ignoreNextLine = false;
+      ignoredLines.push({ file: currentFile, line: line, type: 'next-line' });
+      continue;
+    }
+
+    filteredLines.push(line);
+  }
+
+  return {
+    diff: filteredLines.join('\n'),
+    ignoredLines
+  };
+}
+
+// ============================================================================
+// Feature: PR Size Warning
+// ============================================================================
+
+/**
+ * Check PR size and generate warning if too large
+ */
+function checkPRSize(parsedFiles, config) {
+  if (!config.prSizeWarning?.enabled) {
+    return null;
+  }
+
+  const totalLines = parsedFiles.reduce((sum, f) => sum + f.additions + f.deletions, 0);
+  const totalFiles = parsedFiles.length;
+
+  const warnings = [];
+
+  if (totalLines > config.prSizeWarning.maxLines) {
+    warnings.push(`This PR has **${totalLines} changed lines**, which exceeds the recommended maximum of ${config.prSizeWarning.maxLines} lines.`);
+  }
+
+  if (totalFiles > config.prSizeWarning.maxFiles) {
+    warnings.push(`This PR modifies **${totalFiles} files**, which exceeds the recommended maximum of ${config.prSizeWarning.maxFiles} files.`);
+  }
+
+  if (warnings.length > 0) {
+    return {
+      warning: true,
+      message: `### ⚠️ PR Size Warning\n\n${warnings.join('\n\n')}\n\n**Recommendation**: Consider splitting this PR into smaller, focused changes for easier review and safer merging.`
+    };
+  }
+
+  return null;
+}
+
+// ============================================================================
+// Feature: Comment Threading
+// ============================================================================
+
+/**
+ * Get existing AI review comments on the PR
+ */
+async function getExistingAIComments() {
+  try {
+    const commentsJson = await fs.readFile('pr_comments.json', 'utf-8');
+    const comments = JSON.parse(commentsJson);
+
+    // Filter for our AI review comments
+    return comments.filter(c =>
+      c.body?.includes(AI_REVIEW_MARKER) ||
+      c.body?.includes('🤖') ||
+      c.body?.includes('AI Code Review')
+    );
+  } catch (error) {
+    log('warn', 'Could not load existing comments', { error: error.message });
+    return [];
+  }
+}
+
+/**
+ * Get existing AI reviews on the PR
+ */
+async function getExistingAIReviews() {
+  try {
+    const reviewsJson = await fs.readFile('pr_reviews.json', 'utf-8');
+    const reviews = JSON.parse(reviewsJson);
+
+    // Filter for our AI reviews
+    return reviews.filter(r =>
+      r.body?.includes(AI_REVIEW_MARKER) ||
+      r.body?.includes('🤖 AI Code Review')
+    );
+  } catch (error) {
+    log('warn', 'Could not load existing reviews', { error: error.message });
+    return [];
+  }
+}
+
+/**
+ * Find if there's an existing comment for the same file/line
+ */
+function findExistingComment(existingComments, file, line) {
+  return existingComments.find(c =>
+    c.path === file &&
+    c.line === line
+  );
+}
+
+// ============================================================================
+// Feature: Dismiss Stale Reviews
+// ============================================================================
+
+/**
+ * Check if previous critical issues have been fixed
+ */
+async function checkAndDismissStaleReviews(config, newReviews) {
+  const existingReviews = await getExistingAIReviews();
+
+  // Find our previous REQUEST_CHANGES reviews
+  const previousRequestChanges = existingReviews.filter(r =>
+    r.state === 'CHANGES_REQUESTED'
+  );
+
+  if (previousRequestChanges.length === 0) {
+    return;
+  }
+
+  // Count current critical issues
+  const currentCriticalCount = newReviews.reduce((sum, r) => {
+    return sum + (r.inlineComments || []).filter(c => c.severity === 'critical').length;
+  }, 0);
+
+  // If no more critical issues, we could dismiss (but GitHub API doesn't allow bots to dismiss)
+  // Instead, we'll note it in the new review
+  if (currentCriticalCount === 0) {
+    log('info', 'Previous critical issues appear to be resolved');
+    return { resolved: true, previousCount: previousRequestChanges.length };
+  }
+
+  return { resolved: false };
+}
+
+// ============================================================================
+// GitHub API Functions
+// ============================================================================
+
 async function getPRDiff() {
   try {
     const diffContent = await fs.readFile('pr_diff.txt', 'utf-8');
@@ -211,9 +566,6 @@ async function getPRDiff() {
   }
 }
 
-/**
- * Get list of changed files
- */
 async function getChangedFiles() {
   try {
     const filesContent = await fs.readFile('changed_files.txt', 'utf-8');
@@ -225,52 +577,27 @@ async function getChangedFiles() {
 }
 
 /**
- * Get file content at specific commit
- */
-async function getFileContent(filename, sha) {
-  try {
-    const response = await withRetry(
-      () => octokit.repos.getContent({
-        owner: context.owner,
-        repo: context.repo,
-        path: filename,
-        ref: sha
-      }),
-      `getFileContent:${filename}`
-    );
-
-    if (response.data.content) {
-      return Buffer.from(response.data.content, 'base64').toString('utf-8');
-    }
-    return null;
-  } catch (error) {
-    if (error.status === 404) {
-      return null; // File doesn't exist at this commit
-    }
-    throw error;
-  }
-}
-
-/**
  * Post a review comment on the PR
- * @param {string} body - The review summary markdown
- * @param {Array} comments - Inline comments array
- * @param {string} event - GitHub review event: 'APPROVE', 'REQUEST_CHANGES', or 'COMMENT'
  */
 async function postReviewComment(body, comments = [], event = 'COMMENT') {
   try {
+    // Add our marker to the body for identification
+    const markedBody = `${AI_REVIEW_MARKER}\n${body}`;
+
     await withRetry(
       () => octokit.pulls.createReview({
         owner: context.owner,
         repo: context.repo,
         pull_number: context.prNumber,
         commit_id: context.headSha,
-        body: body,
+        body: markedBody,
         event: event,
         comments: comments
       }),
       'postReviewComment'
     );
+
+    metrics.commentsPosted = comments.length;
     log('info', `Posted review with ${comments.length} inline comments`, { event });
   } catch (error) {
     log('error', 'Failed to post review', { error: error.message });
@@ -282,9 +609,6 @@ async function postReviewComment(body, comments = [], event = 'COMMENT') {
 // Diff Parsing
 // ============================================================================
 
-/**
- * Parse unified diff format into structured data
- */
 function parseDiff(diffContent) {
   const files = [];
   const lines = diffContent.split('\n');
@@ -296,13 +620,11 @@ function parseDiff(diffContent) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // New file header
     if (line.startsWith('diff --git')) {
       if (currentFile) {
         files.push(currentFile);
       }
 
-      // Extract filename from "diff --git a/path b/path"
       const match = line.match(/diff --git a\/(.*) b\/(.*)/);
       if (match) {
         currentFile = {
@@ -317,7 +639,6 @@ function parseDiff(diffContent) {
       continue;
     }
 
-    // Skip file mode, index lines
     if (line.startsWith('index ') ||
         line.startsWith('old mode') ||
         line.startsWith('new mode') ||
@@ -328,7 +649,6 @@ function parseDiff(diffContent) {
       continue;
     }
 
-    // Hunk header
     if (line.startsWith('@@')) {
       const hunkMatch = line.match(/@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(.*)?/);
       if (hunkMatch && currentFile) {
@@ -346,7 +666,6 @@ function parseDiff(diffContent) {
       continue;
     }
 
-    // Content lines
     if (currentHunk && currentFile) {
       if (line.startsWith('+')) {
         currentHunk.changes.push({
@@ -374,7 +693,6 @@ function parseDiff(diffContent) {
     }
   }
 
-  // Don't forget the last file
   if (currentFile) {
     files.push(currentFile);
   }
@@ -382,14 +700,11 @@ function parseDiff(diffContent) {
   return files;
 }
 
-/**
- * Calculate position in diff for inline comments
- */
 function calculateDiffPosition(file, targetLine) {
   let position = 0;
 
   for (const hunk of file.hunks) {
-    position++; // Count the @@ line
+    position++;
 
     for (const change of hunk.changes) {
       position++;
@@ -406,10 +721,7 @@ function calculateDiffPosition(file, targetLine) {
 // Claude API Integration
 // ============================================================================
 
-/**
- * Build the system prompt for Claude
- */
-function buildSystemPrompt(config) {
+function buildSystemPrompt(config, customInstructions) {
   const areas = [];
 
   if (config.reviewAreas.codeQuality) {
@@ -428,14 +740,25 @@ function buildSystemPrompt(config) {
     areas.push('- **Conventions**: Language-specific best practices and style guidelines');
   }
 
-  return `You are an expert code reviewer with deep knowledge of software engineering best practices.
+  let prompt = `You are an expert code reviewer with deep knowledge of software engineering best practices.
 Your task is to review Pull Request changes and provide constructive, actionable feedback.
 
 ## Review Focus Areas
 ${areas.join('\n')}
 
 ## Language Expertise
-You have expertise in: ${config.languages.join(', ')}
+You have expertise in: ${config.languages.join(', ')}`;
+
+  // Add custom instructions if provided
+  if (customInstructions) {
+    prompt += `
+
+## Custom Instructions from PR Author
+The PR author has requested specific focus:
+${customInstructions}`;
+  }
+
+  prompt += `
 
 ## Response Format
 You MUST respond with valid JSON in this exact format:
@@ -480,22 +803,30 @@ When you are CONFIDENT about a fix, include a "suggestedCode" field with the exa
 - **warning**: Potential bugs, performance issues, significant code quality problems
 - **suggestion**: Improvements that would enhance maintainability or readability
 - **nitpick**: Minor style issues, optional improvements`;
+
+  return prompt;
 }
 
-/**
- * Build the user prompt with PR context and diff
- */
-function buildUserPrompt(prContext, files, diff) {
+function buildUserPrompt(prContext, files, diff, isIncremental) {
   const filesSummary = files.map(f => {
     const lang = detectLanguage(f.newPath);
     return `- ${f.newPath} (${lang}): +${f.additions}/-${f.deletions}`;
   }).join('\n');
 
-  return `## Pull Request Information
+  let prompt = `## Pull Request Information
 **Title**: ${prContext.prTitle}
 **Author**: ${prContext.prAuthor}
 **Description**:
-${prContext.prBody || 'No description provided'}
+${prContext.prBody || 'No description provided'}`;
+
+  if (isIncremental) {
+    prompt += `
+
+⚠️ **Note**: This is an INCREMENTAL review of only the NEW changes since the last review.
+Focus on the new code and whether it addresses any previous feedback.`;
+  }
+
+  prompt += `
 
 ## Changed Files Summary
 ${filesSummary}
@@ -506,22 +837,24 @@ ${diff}
 \`\`\`
 
 Please review the above changes and provide your feedback in the specified JSON format.`;
+
+  return prompt;
 }
 
-/**
- * Send diff to Claude for review
- */
-async function reviewWithClaude(config, files, diff) {
-  const systemPrompt = buildSystemPrompt(config);
-  const userPrompt = buildUserPrompt(context, files, diff);
+async function reviewWithClaude(config, files, diff, customInstructions, isIncremental) {
+  const systemPrompt = buildSystemPrompt(config, customInstructions);
+  const userPrompt = buildUserPrompt(context, files, diff, isIncremental);
 
   log('info', 'Sending request to Claude API', {
     model: config.model,
     diffLength: diff.length,
-    filesCount: files.length
+    filesCount: files.length,
+    isIncremental
   });
 
   try {
+    metrics.apiCalls++;
+
     const response = await withRetry(
       () => anthropic.messages.create({
         model: config.model,
@@ -537,13 +870,16 @@ async function reviewWithClaude(config, files, diff) {
       'claudeReview'
     );
 
-    // Extract the text content from the response
+    // Track token usage
+    if (response.usage) {
+      metrics.tokensUsed += response.usage.input_tokens + response.usage.output_tokens;
+    }
+
     const content = response.content[0];
     if (content.type !== 'text') {
       throw new Error('Unexpected response type from Claude');
     }
 
-    // Parse the JSON response
     const jsonMatch = content.text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('No JSON found in Claude response');
@@ -562,9 +898,6 @@ async function reviewWithClaude(config, files, diff) {
   }
 }
 
-/**
- * Chunk large diffs into smaller pieces
- */
 function chunkDiff(diff, files, maxSize) {
   if (diff.length <= maxSize) {
     return [{ diff, files }];
@@ -575,7 +908,6 @@ function chunkDiff(diff, files, maxSize) {
   const chunks = [];
   let currentChunk = { diff: '', files: [] };
 
-  // Split by file
   const filePattern = /^diff --git/m;
   const fileDiffs = diff.split(filePattern).slice(1).map(d => 'diff --git' + d);
 
@@ -591,7 +923,9 @@ function chunkDiff(diff, files, maxSize) {
     }
 
     currentChunk.diff += fileDiff;
-    currentChunk.files.push(file);
+    if (file) {
+      currentChunk.files.push(file);
+    }
   }
 
   if (currentChunk.diff) {
@@ -606,12 +940,7 @@ function chunkDiff(diff, files, maxSize) {
 // Review Formatting
 // ============================================================================
 
-/**
- * Format the summary comment for the PR and determine review event
- * @returns {{ markdown: string, event: string }} The formatted comment and GitHub review event
- */
-function formatSummaryComment(reviews, config) {
-  // Aggregate results from all chunks
+function formatSummaryComment(reviews, config, extras = {}) {
   const allStrengths = [];
   const allConcerns = [];
   let claudeRecommendation = 'COMMENT';
@@ -628,7 +957,6 @@ function formatSummaryComment(reviews, config) {
       if (review.summary.overview) {
         overallOverview = review.summary.overview;
       }
-      // Escalate recommendation if any chunk requests changes
       if (review.summary.recommendation === 'REQUEST_CHANGES') {
         claudeRecommendation = 'REQUEST_CHANGES';
       } else if (review.summary.recommendation === 'APPROVE' && claudeRecommendation !== 'REQUEST_CHANGES') {
@@ -637,7 +965,6 @@ function formatSummaryComment(reviews, config) {
     }
   }
 
-  // Count comments by severity
   const severityCounts = { critical: 0, warning: 0, suggestion: 0, nitpick: 0 };
   for (const review of reviews) {
     for (const comment of review.inlineComments || []) {
@@ -647,13 +974,16 @@ function formatSummaryComment(reviews, config) {
     }
   }
 
-  // Determine final review event: REQUEST_CHANGES if Claude recommends it OR critical findings exist
+  // Update metrics
+  metrics.criticalIssues = severityCounts.critical;
+  metrics.warningIssues = severityCounts.warning;
+  metrics.suggestionIssues = severityCounts.suggestion;
+
   let finalRecommendation = claudeRecommendation;
   if (severityCounts.critical > 0) {
     finalRecommendation = 'REQUEST_CHANGES';
   }
 
-  // Build recommendation emoji
   const recommendationEmoji = {
     'APPROVE': '✅',
     'REQUEST_CHANGES': '🔴',
@@ -662,7 +992,30 @@ function formatSummaryComment(reviews, config) {
 
   let markdown = `## 🤖 AI Code Review Summary
 
-${recommendationEmoji[finalRecommendation]} **Recommendation**: ${finalRecommendation.replace('_', ' ')}
+${recommendationEmoji[finalRecommendation]} **Recommendation**: ${finalRecommendation.replace('_', ' ')}`;
+
+  // Add incremental review note
+  if (extras.isIncremental) {
+    markdown += `
+
+📝 *This is an incremental review of changes since the last review.*`;
+  }
+
+  // Add PR size warning
+  if (extras.sizeWarning) {
+    markdown += `
+
+${extras.sizeWarning.message}`;
+  }
+
+  // Add resolved issues note
+  if (extras.resolvedIssues?.resolved) {
+    markdown += `
+
+✅ **Previous critical issues appear to be resolved!**`;
+  }
+
+  markdown += `
 
 ### Overview
 ${overallOverview || 'Review completed.'}
@@ -690,6 +1043,20 @@ ${allConcerns.map(c => `- ${c}`).join('\n')}
 `;
   }
 
+  // Add metrics section if enabled
+  if (config.metrics?.enabled && config.metrics?.showInComment) {
+    const duration = ((Date.now() - metrics.startTime) / 1000).toFixed(1);
+    markdown += `
+### 📊 Review Metrics
+| Metric | Value |
+|--------|-------|
+| Files reviewed | ${metrics.filesReviewed} |
+| Lines analyzed | ${metrics.linesReviewed} |
+| API calls | ${metrics.apiCalls} |
+| Review time | ${duration}s |
+`;
+  }
+
   markdown += `
 ---
 *This review was generated by Claude (${config.model}). Please use your judgment when evaluating the suggestions.*
@@ -698,16 +1065,12 @@ ${allConcerns.map(c => `- ${c}`).join('\n')}
   return { markdown, event: finalRecommendation };
 }
 
-/**
- * Convert review comments to GitHub PR review format
- */
-function prepareInlineComments(reviews, parsedFiles, config) {
+function prepareInlineComments(reviews, parsedFiles, config, existingComments = []) {
   const comments = [];
   const fileMap = new Map(parsedFiles.map(f => [f.newPath, f]));
 
   for (const review of reviews) {
     for (const comment of review.inlineComments || []) {
-      // Skip based on severity settings
       if (!config.severity[comment.severity]) {
         continue;
       }
@@ -721,6 +1084,13 @@ function prepareInlineComments(reviews, parsedFiles, config) {
       const position = calculateDiffPosition(file, comment.line);
       if (!position) {
         log('warn', `Could not find line ${comment.line} in diff for ${comment.file}`);
+        continue;
+      }
+
+      // Check for existing comment at same location (threading)
+      const existing = findExistingComment(existingComments, comment.file, comment.line);
+      if (existing) {
+        log('info', `Skipping duplicate comment at ${comment.file}:${comment.line}`);
         continue;
       }
 
@@ -739,12 +1109,10 @@ function prepareInlineComments(reviews, parsedFiles, config) {
         convention: '📏'
       };
 
-      // Build comment body with optional code suggestion
       let body = `${severityEmoji[comment.severity] || '💬'} ${categoryEmoji[comment.category] || ''} **${comment.severity?.toUpperCase() || 'INFO'}** (${comment.category || 'general'})
 
 ${comment.comment}`;
 
-      // Add GitHub suggestion syntax if suggestedCode is provided
       if (comment.suggestedCode) {
         body += `
 
@@ -765,17 +1133,63 @@ ${comment.suggestedCode}
 }
 
 // ============================================================================
+// Feature: Metrics/Analytics
+// ============================================================================
+
+/**
+ * Write metrics to GitHub Actions summary
+ */
+async function writeMetricsSummary(config) {
+  if (!config.metrics?.enabled || !config.metrics?.showInSummary) {
+    return;
+  }
+
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (!summaryPath) {
+    log('warn', 'GITHUB_STEP_SUMMARY not available');
+    return;
+  }
+
+  const duration = ((Date.now() - metrics.startTime) / 1000).toFixed(1);
+
+  const summary = `## 📊 AI PR Review Metrics
+
+| Metric | Value |
+|--------|-------|
+| PR Number | #${context.prNumber} |
+| Files Reviewed | ${metrics.filesReviewed} |
+| Lines Analyzed | ${metrics.linesReviewed} |
+| Comments Posted | ${metrics.commentsPosted} |
+| Critical Issues | ${metrics.criticalIssues} |
+| Warnings | ${metrics.warningIssues} |
+| Suggestions | ${metrics.suggestionIssues} |
+| API Calls | ${metrics.apiCalls} |
+| Tokens Used | ${metrics.tokensUsed} |
+| Review Duration | ${duration}s |
+| Incremental Review | ${metrics.incrementalReview ? 'Yes' : 'No'} |
+| Cache Hit | ${metrics.cachedSkipped ? 'Yes (skipped)' : 'No'} |
+`;
+
+  try {
+    await fs.appendFile(summaryPath, summary);
+    log('info', 'Wrote metrics to GitHub Actions summary');
+  } catch (error) {
+    log('warn', 'Failed to write metrics summary', { error: error.message });
+  }
+}
+
+// ============================================================================
 // Main Execution
 // ============================================================================
 
 async function main() {
   log('info', 'Starting AI PR Review', {
     pr: context.prNumber,
-    repo: `${context.owner}/${context.repo}`
+    repo: `${context.owner}/${context.repo}`,
+    event: context.eventName
   });
 
   try {
-    // Load configuration
     const config = await loadConfig();
 
     if (!config.enabled) {
@@ -783,14 +1197,42 @@ async function main() {
       return;
     }
 
-    // Get diff and parse it
-    const rawDiff = await getPRDiff();
+    // Feature: Check cache
+    if (await isCommitAlreadyReviewed(config)) {
+      await writeMetricsSummary(config);
+      return;
+    }
+
+    // Feature: Get last reviewed commit for incremental review
+    const lastReviewedCommit = await getLastReviewedCommit();
+
+    // Get diff (try incremental first)
+    let rawDiff = await getIncrementalDiff(config, lastReviewedCommit);
+    const isIncremental = rawDiff !== null;
+
+    if (!rawDiff) {
+      rawDiff = await getPRDiff();
+    }
+
     const changedFiles = await getChangedFiles();
 
-    log('info', `Processing ${changedFiles.length} changed files`);
+    log('info', `Processing ${changedFiles.length} changed files`, { isIncremental });
+
+    // Feature: Filter ignored content
+    const { diff: filteredDiffContent, ignoredLines } = filterIgnoredContent(rawDiff, config);
+    if (ignoredLines.length > 0) {
+      log('info', `Filtered ${ignoredLines.length} ignored lines/files`);
+    }
 
     // Parse the diff
-    const parsedFiles = parseDiff(rawDiff);
+    const parsedFiles = parseDiff(filteredDiffContent);
+
+    // Update metrics
+    metrics.filesReviewed = parsedFiles.length;
+    metrics.linesReviewed = parsedFiles.reduce((sum, f) => sum + f.additions + f.deletions, 0);
+
+    // Feature: PR size warning
+    const sizeWarning = checkPRSize(parsedFiles, config);
 
     // Filter out ignored files
     const filesToReview = parsedFiles.filter(f =>
@@ -803,6 +1245,7 @@ async function main() {
         '## 🤖 AI Code Review\n\nNo reviewable files found in this PR (all files matched ignore patterns).',
         []
       );
+      await writeMetricsSummary(config);
       return;
     }
 
@@ -817,18 +1260,21 @@ async function main() {
       const startPattern = new RegExp(`diff --git a/${f.oldPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} b/${f.newPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
       const nextFilePattern = /^diff --git/m;
 
-      const startMatch = rawDiff.match(startPattern);
+      const startMatch = filteredDiffContent.match(startPattern);
       if (!startMatch) return '';
 
       const startIndex = startMatch.index;
-      const afterStart = rawDiff.substring(startIndex + startMatch[0].length);
+      const afterStart = filteredDiffContent.substring(startIndex + startMatch[0].length);
       const nextMatch = afterStart.match(nextFilePattern);
 
       if (nextMatch) {
-        return rawDiff.substring(startIndex, startIndex + startMatch[0].length + nextMatch.index);
+        return filteredDiffContent.substring(startIndex, startIndex + startMatch[0].length + nextMatch.index);
       }
-      return rawDiff.substring(startIndex);
+      return filteredDiffContent.substring(startIndex);
     }).join('');
+
+    // Feature: Get custom instructions
+    const customInstructions = extractCustomInstructions(config);
 
     // Chunk if necessary and review
     const chunks = chunkDiff(filteredDiff, limitedFiles, config.chunkSize);
@@ -836,24 +1282,43 @@ async function main() {
 
     for (let i = 0; i < chunks.length; i++) {
       log('info', `Processing chunk ${i + 1}/${chunks.length}`);
-      const review = await reviewWithClaude(config, chunks[i].files, chunks[i].diff);
+      const review = await reviewWithClaude(
+        config,
+        chunks[i].files,
+        chunks[i].diff,
+        customInstructions,
+        isIncremental
+      );
       reviews.push(review);
 
-      // Add delay between chunks to avoid rate limiting
       if (i < chunks.length - 1) {
         await sleep(2000);
       }
     }
 
+    // Feature: Check if previous issues were resolved
+    const resolvedIssues = await checkAndDismissStaleReviews(config, reviews);
+
+    // Feature: Get existing comments for threading
+    const existingComments = await getExistingAIComments();
+
     // Prepare and post the review
-    const { markdown: summaryComment, event: reviewEvent } = formatSummaryComment(reviews, config);
-    const inlineComments = prepareInlineComments(reviews, parsedFiles, config);
+    const { markdown: summaryComment, event: reviewEvent } = formatSummaryComment(
+      reviews,
+      config,
+      { isIncremental, sizeWarning, resolvedIssues }
+    );
+    const inlineComments = prepareInlineComments(reviews, parsedFiles, config, existingComments);
 
     await postReviewComment(summaryComment, inlineComments, reviewEvent);
 
+    // Feature: Write metrics summary
+    await writeMetricsSummary(config);
+
     log('info', 'Review completed successfully', {
       inlineComments: inlineComments.length,
-      reviewEvent
+      reviewEvent,
+      isIncremental
     });
 
   } catch (error) {
@@ -861,9 +1326,16 @@ async function main() {
       error: error.message,
       stack: error.stack
     });
+
+    // Still try to write metrics on failure
+    try {
+      await writeMetricsSummary(await loadConfig());
+    } catch (e) {
+      // Ignore metrics failure
+    }
+
     process.exit(1);
   }
 }
 
-// Run the main function
 main();

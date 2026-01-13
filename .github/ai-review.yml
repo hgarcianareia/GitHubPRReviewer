@@ -59,3 +59,43 @@ severity:
   warning: true     # Potential bugs, performance issues
   suggestion: true  # Improvements for maintainability
   nitpick: false    # Minor style issues (disabled by default)
+
+# ============================================================================
+# NEW FEATURES
+# ============================================================================
+
+# PR Size Warning - warn when PR is too large
+prSizeWarning:
+  enabled: true
+  maxLines: 1000            # Warn if total changes exceed this
+  maxFiles: 30              # Warn if number of files exceeds this
+
+# Incremental Reviews - only review new commits after first review
+incrementalReview:
+  enabled: true
+  # First review is always full, subsequent reviews are incremental
+
+# Review Caching - skip re-review if commit already reviewed
+caching:
+  enabled: true
+
+# Custom Review Instructions - parse PR description for focus areas
+# Use <!-- ai-review: focus on security --> in PR description
+customInstructions:
+  enabled: true
+  # Looks for: <!-- ai-review: your instructions here -->
+
+# File-level ignore comments
+# Add "// ai-review-ignore" or "# ai-review-ignore" to skip specific lines
+inlineIgnore:
+  enabled: true
+  patterns:
+    - "ai-review-ignore"
+    - "ai-review-ignore-next-line"
+    - "ai-review-ignore-file"
+
+# Metrics and Analytics
+metrics:
+  enabled: true
+  showInSummary: true       # Show in GitHub Actions summary
+  showInComment: true       # Show in PR review comment
