@@ -1875,12 +1875,16 @@ async function main() {
     // Feature: Get last reviewed commit for incremental review
     const lastReviewedCommit = await getLastReviewedCommit();
 
-    // Get diff (try incremental first)
+    // Always get the full PR diff for comment positioning (GitHub requires this)
+    const fullPRDiff = await getPRDiff();
+    const fullPRParsedFiles = parseDiff(fullPRDiff);
+
+    // Get diff (try incremental first for review content)
     let rawDiff = await getIncrementalDiff(config, lastReviewedCommit);
     const isIncremental = rawDiff !== null;
 
     if (!rawDiff) {
-      rawDiff = await getPRDiff();
+      rawDiff = fullPRDiff;
     }
 
     const changedFiles = await getChangedFiles();
@@ -1893,7 +1897,7 @@ async function main() {
       log('info', `Filtered ${ignoredLines.length} ignored lines/files`);
     }
 
-    // Parse the diff
+    // Parse the diff for review
     const parsedFiles = parseDiff(filteredDiffContent);
 
     // Update metrics
@@ -2004,7 +2008,8 @@ async function main() {
       config,
       { isIncremental, sizeWarning, resolvedIssues, autoFixResult }
     );
-    const inlineComments = prepareInlineComments(filteredReviews, parsedFiles, config, existingComments);
+    // Use fullPRParsedFiles for comment positioning (GitHub requires positions relative to full PR diff)
+    const inlineComments = prepareInlineComments(filteredReviews, fullPRParsedFiles, config, existingComments);
 
     await postReviewComment(summaryComment, inlineComments, reviewEvent);
 
