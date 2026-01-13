@@ -70,11 +70,6 @@ prSizeWarning:
   maxLines: 1000            # Warn if total changes exceed this
   maxFiles: 30              # Warn if number of files exceeds this
 
-# Incremental Reviews - only review new commits after first review
-incrementalReview:
-  enabled: true
-  # First review is always full, subsequent reviews are incremental
-
 # Review Caching - skip re-review if commit already reviewed
 caching:
   enabled: true

@@ -5,7 +5,6 @@
  * Posts inline comments and a summary review on the PR.
  *
  * Features:
- *   - Incremental reviews (only review new commits after first review)
  *   - Comment threading (update existing comments instead of duplicates)
  *   - Auto-dismiss stale reviews when issues are fixed
  *   - File-level ignore comments (ai-review-ignore)
@@ -69,9 +68,6 @@ const DEFAULT_CONFIG = {
     enabled: true,
     maxLines: 1000,
     maxFiles: 30
-  },
-  incrementalReview: {
-    enabled: true
   },
   caching: {
     enabled: true
@@ -157,7 +153,6 @@ const metrics = {
   warningIssues: 0,
   suggestionIssues: 0,
   cachedSkipped: false,
-  incrementalReview: false,
   apiCalls: 0,
   tokensUsed: 0,
   // High Impact feature metrics
@@ -341,55 +336,6 @@ async function isCommitAlreadyReviewed(config) {
   }
 
   return false;
-}
-
-/**
- * Get the last reviewed commit SHA
- */
-async function getLastReviewedCommit() {
-  try {
-    const cachePath = path.join(process.cwd(), '.ai-review-cache', 'reviewed-commits.txt');
-    const cacheContent = await fs.readFile(cachePath, 'utf-8');
-    const reviewedCommits = cacheContent.split('\n').filter(c => c.trim());
-    return reviewedCommits[reviewedCommits.length - 1] || null;
-  } catch (error) {
-    return null;
-  }
-}
-
-// ============================================================================
-// Feature: Incremental Reviews
-// ============================================================================
-
-/**
- * Get incremental diff (only changes since last review)
- */
-async function getIncrementalDiff(config, lastReviewedCommit) {
-  if (!config.incrementalReview?.enabled || !lastReviewedCommit) {
-    return null;
-  }
-
-  try {
-    // Get diff between last reviewed commit and current head
-    const { execSync } = await import('child_process');
-    const diff = execSync(
-      `git diff ${lastReviewedCommit}..${context.headSha}`,
-      { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }
-    );
-
-    if (diff.trim()) {
-      log('info', 'Using incremental diff', {
-        from: lastReviewedCommit.substring(0, 7),
-        to: context.headSha.substring(0, 7)
-      });
-      metrics.incrementalReview = true;
-      return diff;
-    }
-  } catch (error) {
-    log('warn', 'Failed to get incremental diff, using full diff', { error: error.message });
-  }
-
-  return null;
 }
 
 // ============================================================================
@@ -595,9 +541,7 @@ async function checkAndDismissStaleReviews(config, newReviews) {
     return sum + (r.inlineComments || []).filter(c => c.severity === 'critical').length;
   }, 0);
 
-  // Note: This only checks if the CURRENT review has no critical issues.
-  // It doesn't verify that previously reported issues were actually fixed.
-  // For incremental reviews, this may be misleading since we're only reviewing new changes.
+  // If no more critical issues in the current full review, previous issues may be resolved
   if (currentCriticalCount === 0 && previousRequestChanges.length > 0) {
     log('info', 'No critical issues in current review (previous reviews had REQUEST_CHANGES)');
     return { resolved: true, previousCount: previousRequestChanges.length };
@@ -1437,7 +1381,7 @@ When you are CONFIDENT about a fix, include a "suggestedCode" field with the exa
   return prompt;
 }
 
-function buildUserPrompt(prContext, files, diff, isIncremental, relatedFilesContent = '') {
+function buildUserPrompt(prContext, files, diff, relatedFilesContent = '') {
   const filesSummary = files.map(f => {
     const lang = detectLanguage(f.newPath);
     return `- ${f.newPath} (${lang}): +${f.additions}/-${f.deletions}`;
@@ -1447,16 +1391,7 @@ function buildUserPrompt(prContext, files, diff, isIncremental, relatedFilesCont
 **Title**: ${prContext.prTitle}
 **Author**: ${prContext.prAuthor}
 **Description**:
-${prContext.prBody || 'No description provided'}`;
-
-  if (isIncremental) {
-    prompt += `
-
-⚠️ **Note**: This is an INCREMENTAL review of only the NEW changes since the last review.
-Focus on the new code and whether it addresses any previous feedback.`;
-  }
-
-  prompt += `
+${prContext.prBody || 'No description provided'}
 
 ## Changed Files Summary
 ${filesSummary}
@@ -1479,15 +1414,14 @@ Please review the above changes and provide your feedback in the specified JSON 
   return prompt;
 }
 
-async function reviewWithClaude(config, files, diff, customInstructions, isIncremental, relatedFilesContent = '') {
+async function reviewWithClaude(config, files, diff, customInstructions, relatedFilesContent = '') {
   const systemPrompt = buildSystemPrompt(config, customInstructions);
-  const userPrompt = buildUserPrompt(context, files, diff, isIncremental, relatedFilesContent);
+  const userPrompt = buildUserPrompt(context, files, diff, relatedFilesContent);
 
   log('info', 'Sending request to Claude API', {
     model: config.model,
     diffLength: diff.length,
-    filesCount: files.length,
-    isIncremental
+    filesCount: files.length
   });
 
   try {
@@ -1632,13 +1566,6 @@ function formatSummaryComment(reviews, config, extras = {}) {
 
 ${recommendationEmoji[finalRecommendation]} **Recommendation**: ${finalRecommendation.replace('_', ' ')}`;
 
-  // Add incremental review note
-  if (extras.isIncremental) {
-    markdown += `
-
-📝 *This is an incremental review of changes since the last review.*`;
-  }
-
   // Add PR size warning
   if (extras.sizeWarning) {
     markdown += `
@@ -1646,17 +1573,11 @@ ${recommendationEmoji[finalRecommendation]} **Recommendation**: ${finalRecommend
 ${extras.sizeWarning.message}`;
   }
 
-  // Add resolved issues note (with caveat for incremental reviews)
+  // Add resolved issues note
   if (extras.resolvedIssues?.resolved) {
-    if (extras.isIncremental) {
-      markdown += `
-
-ℹ️ **Note**: No critical issues found in this incremental review. Please verify that previous critical issues have been addressed.`;
-    } else {
-      markdown += `
+    markdown += `
 
 ✅ **Previous critical issues appear to be resolved!**`;
-    }
   }
 
   markdown += `
@@ -1838,7 +1759,6 @@ async function writeMetricsSummary(config) {
 | API Calls | ${metrics.apiCalls} |
 | Tokens Used | ${metrics.tokensUsed} |
 | Review Duration | ${duration}s |
-| Incremental Review | ${metrics.incrementalReview ? 'Yes' : 'No'} |
 | Cache Hit | ${metrics.cachedSkipped ? 'Yes (skipped)' : 'No'} |
 | Related Files Read | ${metrics.relatedFilesRead} |
 | Suggested Fixes | ${metrics.suggestedFixesCount} |
@@ -1879,24 +1799,11 @@ async function main() {
       return;
     }
 
-    // Feature: Get last reviewed commit for incremental review
-    const lastReviewedCommit = await getLastReviewedCommit();
-
-    // Always get the full PR diff for comment positioning (GitHub requires this)
-    const fullPRDiff = await getPRDiff();
-    const fullPRParsedFiles = parseDiff(fullPRDiff);
-
-    // Get diff (try incremental first for review content)
-    let rawDiff = await getIncrementalDiff(config, lastReviewedCommit);
-    const isIncremental = rawDiff !== null;
-
-    if (!rawDiff) {
-      rawDiff = fullPRDiff;
-    }
-
+    // Get the full PR diff
+    const rawDiff = await getPRDiff();
     const changedFiles = await getChangedFiles();
 
-    log('info', `Processing ${changedFiles.length} changed files`, { isIncremental });
+    log('info', `Processing ${changedFiles.length} changed files`);
 
     // Feature: Filter ignored content
     const { diff: filteredDiffContent, ignoredLines } = filterIgnoredContent(rawDiff, config);
@@ -1973,7 +1880,6 @@ async function main() {
         chunks[i].files,
         chunks[i].diff,
         customInstructions,
-        isIncremental,
         relatedFiles.content  // Pass contextual awareness
       );
       reviews.push(review);
@@ -2013,14 +1919,12 @@ async function main() {
     const { markdown: summaryComment, event: reviewEvent } = formatSummaryComment(
       filteredReviews,
       config,
-      { isIncremental, sizeWarning, resolvedIssues, autoFixResult }
+      { sizeWarning, resolvedIssues, autoFixResult }
     );
-    // Use fullPRParsedFiles for comment positioning (GitHub requires positions relative to full PR diff)
-    // For incremental reviews, we can only comment on files that are in the full PR diff
-    const inlineComments = prepareInlineComments(filteredReviews, fullPRParsedFiles, config, existingComments);
+    const inlineComments = prepareInlineComments(filteredReviews, parsedFiles, config, existingComments);
 
-    if (isIncremental && inlineComments.length === 0) {
-      log('info', 'Incremental review: no inline comments could be posted (files not in PR diff). Only posting summary.');
+    if (inlineComments.length === 0) {
+      log('info', 'No inline comments to post (all filtered or position not found)');
     }
 
     await postReviewComment(summaryComment, inlineComments, reviewEvent);
@@ -2034,7 +1938,6 @@ async function main() {
     log('info', 'Review completed successfully', {
       inlineComments: inlineComments.length,
       reviewEvent,
-      isIncremental,
       relatedFilesRead: metrics.relatedFilesRead,
       autoFixCreated: metrics.autoFixPRCreated
     });
