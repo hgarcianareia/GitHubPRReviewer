@@ -90,8 +90,7 @@ const DEFAULT_CONFIG = {
   },
   // High Impact Features
   feedbackLoop: {
-    enabled: true
-      log('info', `Converting APPROVE to COMMENT (GitHub Actions cannot approve PRs) - original event: ${event}`);
+    enabled: true  // Feedback stored in GitHub Actions Summary
   },
   contextualAwareness: {
     enabled: true,
