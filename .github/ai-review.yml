@@ -1,0 +1,61 @@
+# AI PR Review Configuration
+# This file allows you to customize the behavior of the AI PR review action.
+
+# Enable or disable AI reviews globally
+enabled: true
+
+# Claude model to use for reviews
+# Options: claude-sonnet-4-20250514, claude-opus-4-20250514
+model: claude-sonnet-4-20250514
+
+# Maximum tokens for Claude's response
+maxTokens: 4096
+
+# Review focus areas - disable any areas you don't want reviewed
+reviewAreas:
+  codeQuality: true      # Clean code, readability, maintainability
+  security: true         # Vulnerabilities, injection risks, data exposure
+  documentation: true    # Code comments, function docs
+  testCoverage: true     # Test coverage gaps, edge cases
+  conventions: true      # Language-specific best practices
+
+# Languages to provide specialized feedback for
+languages:
+  - csharp
+  - typescript
+  - python
+
+# File patterns to ignore (glob patterns)
+# Files matching these patterns will not be reviewed
+ignorePatterns:
+  - "*.lock"
+  - "package-lock.json"
+  - "yarn.lock"
+  - "pnpm-lock.yaml"
+  - "*.min.js"
+  - "*.min.css"
+  - "*.map"
+  - "dist/**"
+  - "build/**"
+  - "out/**"
+  - "node_modules/**"
+  - ".git/**"
+  - "*.generated.cs"
+  - "*.Designer.cs"
+  - "Migrations/**"
+
+# Maximum characters per chunk for large diffs
+# Larger diffs will be split into multiple API calls
+chunkSize: 100000
+
+# Maximum number of files to review per PR
+# Prevents excessive API usage on very large PRs
+maxFilesPerReview: 50
+
+# Severity levels to include in the review
+# Set to false to hide comments of that severity
+severity:
+  critical: true    # Security issues, bugs causing failures
+  warning: true     # Potential bugs, performance issues
+  suggestion: true  # Improvements for maintainability
+  nitpick: false    # Minor style issues (disabled by default)
