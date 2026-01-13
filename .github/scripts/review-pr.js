@@ -202,14 +202,15 @@ async function loadConfig() {
     const configContent = await fs.readFile(configPath, 'utf-8');
     const userConfig = yaml.load(configContent);
     log('info', 'Loaded custom configuration from .github/ai-review.yml');
-    return deepMerge(DEFAULT_CONFIG, userConfig);
+    const merged = deepMerge(DEFAULT_CONFIG, userConfig);
+    return normalizeConfig(merged);
   } catch (error) {
     if (error.code === 'ENOENT') {
       log('info', 'No custom config found, using defaults');
-      return DEFAULT_CONFIG;
+      return normalizeConfig(DEFAULT_CONFIG);
     }
     log('warn', 'Error loading config, using defaults', { error: error.message });
-    return DEFAULT_CONFIG;
+    return normalizeConfig(DEFAULT_CONFIG);
   }
 }
 
@@ -229,15 +230,34 @@ function deepMerge(target, source) {
 }
 
 /**
+ * Ensure a value is an array (YAML sometimes parses arrays as objects)
+ */
+function ensureArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return Object.values(value);
+}
+
+/**
+ * Normalize config to ensure all array fields are actually arrays
+ */
+function normalizeConfig(config) {
+  return {
+    ...config,
+    languages: ensureArray(config.languages),
+    ignorePatterns: ensureArray(config.ignorePatterns),
+    inlineIgnore: config.inlineIgnore ? {
+      ...config.inlineIgnore,
+      patterns: ensureArray(config.inlineIgnore.patterns)
+    } : config.inlineIgnore
+  };
+}
+
+/**
  * Check if a file should be ignored based on patterns
  */
 function shouldIgnoreFile(filename, ignorePatterns) {
-  // Ensure ignorePatterns is an array
-  let patterns = ignorePatterns || [];
-  if (!Array.isArray(patterns)) {
-    patterns = Object.values(patterns);
-  }
-
+  const patterns = ignorePatterns || [];
   return patterns.some(pattern => {
     const regexPattern = pattern
       .replace(/\./g, '\\.')
@@ -382,11 +402,7 @@ function filterIgnoredContent(diff, config) {
     return { diff, ignoredLines: [] };
   }
 
-  // Ensure patterns is an array
-  let patterns = config.inlineIgnore.patterns || [];
-  if (!Array.isArray(patterns)) {
-    patterns = Object.values(patterns);
-  }
+  const patterns = config.inlineIgnore.patterns || [];
   const lines = diff.split('\n');
   const filteredLines = [];
   const ignoredLines = [];
