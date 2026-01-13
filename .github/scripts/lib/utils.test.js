@@ -70,18 +70,37 @@ describe('sanitizeBranchName', () => {
     assert.strictEqual(sanitizeBranchName('ai-fix/pr-42'), 'ai-fix/pr-42');
   });
 
-  it('should replace special characters with hyphens', () => {
-    assert.strictEqual(sanitizeBranchName('feature@branch'), 'feature-branch');
-    assert.strictEqual(sanitizeBranchName('fix#123'), 'fix-123');
+  it('should replace shell injection characters with hyphens', () => {
+    // Only dangerous shell characters are replaced, not @ or #
     assert.strictEqual(sanitizeBranchName('test$branch'), 'test-branch');
+    assert.strictEqual(sanitizeBranchName('test;branch'), 'test-branch');
+    assert.strictEqual(sanitizeBranchName('test|branch'), 'test-branch');
+    assert.strictEqual(sanitizeBranchName('test&branch'), 'test-branch');
+  });
+
+  it('should preserve non-dangerous special characters', () => {
+    // @ and # are not shell injection risks, so they're preserved
+    assert.strictEqual(sanitizeBranchName('feature@branch'), 'feature@branch');
+    assert.strictEqual(sanitizeBranchName('fix#123'), 'fix#123');
   });
 
   it('should handle shell injection attempts', () => {
-    assert.strictEqual(sanitizeBranchName('branch; rm -rf /'), 'branch-rm-rf-');
+    // Semicolons are replaced, slashes trimmed from end, spaces preserved
+    assert.strictEqual(sanitizeBranchName('branch; rm -rf /'), 'branch- rm -rf ');
     assert.strictEqual(sanitizeBranchName('branch$(whoami)'), 'branch-whoami-');
     assert.strictEqual(sanitizeBranchName('branch`id`'), 'branch-id-');
     // Slashes are allowed in branch names (e.g., feature/foo), but dangerous chars are removed
-    assert.strictEqual(sanitizeBranchName('branch|cat /etc/passwd'), 'branch-cat-/etc/passwd');
+    assert.strictEqual(sanitizeBranchName('branch|cat /etc/passwd'), 'branch-cat /etc/passwd');
+  });
+
+  it('should preserve dots and tildes (valid git ref chars)', () => {
+    assert.strictEqual(sanitizeBranchName('v1.0.0'), 'v1.0.0');
+    assert.strictEqual(sanitizeBranchName('feature/v2.0~beta'), 'feature/v2.0~beta');
+  });
+
+  it('should truncate long branch names to 200 chars', () => {
+    const longName = 'a'.repeat(250);
+    assert.strictEqual(sanitizeBranchName(longName).length, 200);
   });
 
   it('should collapse consecutive hyphens', () => {
@@ -225,6 +244,20 @@ describe('deepMerge', () => {
     const result = deepMerge(target, source);
     assert.deepStrictEqual(result, { arr: [4, 5] });
   });
+
+  it('should handle nested arrays correctly', () => {
+    const target = { a: { b: [1, 2] } };
+    const source = { a: { b: [3, 4, 5] } };
+    const result = deepMerge(target, source);
+    assert.deepStrictEqual(result, { a: { b: [3, 4, 5] } });
+  });
+
+  it('should replace array in target with object from source', () => {
+    const target = { a: [1, 2, 3] };
+    const source = { a: { x: 1 } };
+    const result = deepMerge(target, source);
+    assert.deepStrictEqual(result, { a: { x: 1 } });
+  });
 });
 
 // ============================================================================
@@ -321,6 +354,49 @@ diff --git a/file2.js b/file2.js
   it('should handle empty diff', () => {
     const files = parseDiff('');
     assert.strictEqual(files.length, 0);
+  });
+
+  it('should handle malformed diff - missing hunk header', () => {
+    const malformedDiff = `diff --git a/file.js b/file.js
+--- a/file.js
++++ b/file.js
++added line without hunk header
+`;
+    const files = parseDiff(malformedDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].hunks.length, 0); // No valid hunks
+  });
+
+  it('should handle malformed diff - incomplete file header', () => {
+    const malformedDiff = `diff --git
+@@ -1,1 +1,1 @@
++line
+`;
+    const files = parseDiff(malformedDiff);
+    // Should not crash, may have empty or partial results
+    assert.ok(Array.isArray(files));
+  });
+
+  it('should handle malformed diff - invalid hunk header', () => {
+    const malformedDiff = `diff --git a/file.js b/file.js
+@@ invalid hunk @@
++added line
+`;
+    const files = parseDiff(malformedDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].hunks.length, 0); // Invalid hunk not parsed
+  });
+
+  it('should handle diff with only metadata lines', () => {
+    const metadataOnlyDiff = `diff --git a/file.js b/file.js
+index abc123..def456 100644
+--- a/file.js
++++ b/file.js
+`;
+    const files = parseDiff(metadataOnlyDiff);
+    assert.strictEqual(files.length, 1);
+    assert.strictEqual(files[0].additions, 0);
+    assert.strictEqual(files[0].deletions, 0);
   });
 });
 

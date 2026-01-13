@@ -144,10 +144,23 @@ const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN
 });
 
+/**
+ * Safely parse PR number with user-friendly error message
+ */
+function safeParsePRNumber() {
+  try {
+    return parsePRNumber(process.env.PR_NUMBER);
+  } catch (error) {
+    console.error(`[ERROR] Failed to parse PR_NUMBER environment variable: ${process.env.PR_NUMBER}`);
+    console.error('[ERROR] Ensure PR_NUMBER is set to a valid positive integer.');
+    process.exit(1);
+  }
+}
+
 const context = {
   owner: process.env.REPO_OWNER,
   repo: process.env.REPO_NAME,
-  prNumber: parsePRNumber(process.env.PR_NUMBER),
+  prNumber: safeParsePRNumber(),
   prTitle: process.env.PR_TITLE || '',
   prBody: process.env.PR_BODY || '',
   prAuthor: process.env.PR_AUTHOR || '',

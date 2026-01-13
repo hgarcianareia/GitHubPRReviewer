@@ -103,13 +103,25 @@ Use clear, descriptive commit messages:
 - `docs: Update README with Z`
 - `refactor: Improve performance of W`
 
+### Testing
+
+Before submitting a PR, ensure all tests pass:
+
+```bash
+cd .github/scripts
+npm test
+```
+
+When adding new utility functions to `lib/utils.js`, please add corresponding tests to `lib/utils.test.js`. The project uses Node.js built-in test runner (requires Node 20+).
+
 ### Pull Request Guidelines
 
 1. Keep PRs focused on a single change
 2. Update documentation if needed
 3. Add configuration options for new features (in `ai-review.yml`)
 4. Ensure backward compatibility or document breaking changes
-5. Your PR will be reviewed by this very action!
+5. **Run `npm test` and ensure all tests pass**
+6. Your PR will be reviewed by this very action!
 
 ## Configuration Changes
 

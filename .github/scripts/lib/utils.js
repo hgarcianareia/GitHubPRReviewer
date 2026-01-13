@@ -20,25 +20,34 @@ export function parsePRNumber(value) {
 }
 
 /**
+ * Maximum length for git branch names (git typically allows ~255 bytes)
+ */
+const MAX_BRANCH_NAME_LENGTH = 200;
+
+/**
  * Sanitize a git branch name to prevent command injection
+ * Allows valid git ref characters: alphanumeric, hyphens, underscores, forward slashes, dots, and tildes
+ * Blocks shell injection characters: ; | & $ ` ( ) { } < > \ " '
  * @param {string} name - The branch name to sanitize
- * @returns {string} - The sanitized branch name
+ * @returns {string} - The sanitized branch name (max 200 chars)
  */
 export function sanitizeBranchName(name) {
   if (!name || typeof name !== 'string') {
     return '';
   }
-  // Remove any characters that aren't alphanumeric, hyphens, underscores, or forward slashes
-  // Also prevent consecutive slashes and leading/trailing slashes
+  // Remove shell injection characters while preserving valid git ref chars (. and ~)
   return name
-    .replace(/[^a-zA-Z0-9\-_\/]/g, '-')
+    .replace(/[;|&$`(){}<>\\\"']/g, '-')
     .replace(/\/+/g, '/')
     .replace(/^\/|\/$/g, '')
-    .replace(/-+/g, '-');
+    .replace(/-+/g, '-')
+    .slice(0, MAX_BRANCH_NAME_LENGTH);
 }
 
 /**
  * Check if a file should be ignored based on patterns
+ * Note: Patterns like '*.min.js' only match files in the root directory.
+ * Use '**\/*.min.js' to match in subdirectories.
  * @param {string} filename - The filename to check
  * @param {string[]} ignorePatterns - Array of glob patterns
  * @returns {boolean} - True if the file should be ignored
@@ -78,6 +87,7 @@ export function detectLanguage(filename) {
 
 /**
  * Deep merge two objects
+ * Arrays are replaced, not merged. Only plain objects are recursively merged.
  * @param {Object} target - The target object
  * @param {Object} source - The source object
  * @returns {Object} - The merged object
@@ -85,9 +95,14 @@ export function detectLanguage(filename) {
 export function deepMerge(target, source) {
   const result = { ...target };
   for (const key in source) {
-    if (source[key] instanceof Object && key in target && !(source[key] instanceof Array)) {
+    // If source value is an array or not an object, replace directly
+    if (Array.isArray(source[key]) || !(source[key] instanceof Object)) {
+      result[key] = source[key];
+    } else if (key in target && target[key] instanceof Object && !Array.isArray(target[key])) {
+      // Both are non-array objects, merge recursively
       result[key] = deepMerge(target[key], source[key]);
     } else {
+      // Target doesn't have this key or target value is not an object
       result[key] = source[key];
     }
   }
@@ -96,6 +111,8 @@ export function deepMerge(target, source) {
 
 /**
  * Ensure a value is an array
+ * Note: If an object is passed, only its values are returned (keys are lost).
+ * This is intended for YAML parsing where arrays may be parsed as indexed objects.
  * @param {*} value - The value to check
  * @returns {Array} - The value as an array
  */
