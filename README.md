@@ -333,7 +333,7 @@ npm run test:watch # Run tests in watch mode
 ├── scripts/
 │   ├── lib/
 │   │   ├── utils.js       # Testable utility functions
-│   │   └── utils.test.js  # Unit tests (46 tests)
+│   │   └── utils.test.js  # Unit tests (120 tests)
 │   ├── review-pr.js       # Main review script
 │   └── package.json       # Dependencies and scripts
 ├── workflows/
@@ -349,7 +349,3 @@ Contributions are welcome! Please:
 3. Make your changes
 4. Run `npm test` to ensure tests pass
 5. Submit a Pull Request (it will be reviewed by this action!)
-
-## License
-
-MIT License - see LICENSE file for details.
