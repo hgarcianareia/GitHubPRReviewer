@@ -1184,6 +1184,14 @@ async function postReviewComment(body, comments = [], event = 'COMMENT') {
     // Add our marker to the body for identification
     const markedBody = `${AI_REVIEW_MARKER}\n${body}`;
 
+    // GitHub Actions cannot APPROVE PRs by default (security restriction)
+    // Convert APPROVE to COMMENT to avoid 422 errors
+    let safeEvent = event;
+    if (event === 'APPROVE') {
+      log('info', 'Converting APPROVE to COMMENT (GitHub Actions cannot approve PRs)');
+      safeEvent = 'COMMENT';
+    }
+
     await withRetry(
       () => octokit.pulls.createReview({
         owner: context.owner,
@@ -1191,14 +1199,14 @@ async function postReviewComment(body, comments = [], event = 'COMMENT') {
         pull_number: context.prNumber,
         commit_id: context.headSha,
         body: markedBody,
-        event: event,
+        event: safeEvent,
         comments: comments
       }),
       'postReviewComment'
     );
 
     metrics.commentsPosted = comments.length;
-    log('info', `Posted review with ${comments.length} inline comments`, { event });
+    log('info', `Posted review with ${comments.length} inline comments`, { event: safeEvent });
   } catch (error) {
     log('error', 'Failed to post review', { error: error.message });
     throw error;
