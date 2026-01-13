@@ -4,7 +4,9 @@
   "description": "AI-powered PR review using Claude",
   "type": "module",
   "scripts": {
-    "review": "node review-pr.js"
+    "review": "node review-pr.js",
+    "test": "node --test lib/utils.test.js",
+    "test:watch": "node --test --watch lib/utils.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

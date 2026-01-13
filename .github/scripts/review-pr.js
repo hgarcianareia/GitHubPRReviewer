@@ -29,6 +29,20 @@ import fs from 'fs/promises';
 import yaml from 'js-yaml';
 import path from 'path';
 
+// Import utility functions (also used for testing)
+import {
+  parsePRNumber,
+  sanitizeBranchName,
+  shouldIgnoreFile,
+  detectLanguage,
+  deepMerge,
+  ensureArray,
+  parseDiff,
+  calculateDiffPosition,
+  getSeverityLevel,
+  SEVERITY_LEVELS
+} from './lib/utils.js';
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -133,7 +147,7 @@ const octokit = new Octokit({
 const context = {
   owner: process.env.REPO_OWNER,
   repo: process.env.REPO_NAME,
-  prNumber: parseInt(process.env.PR_NUMBER, 10),
+  prNumber: parsePRNumber(process.env.PR_NUMBER),
   prTitle: process.env.PR_TITLE || '',
   prBody: process.env.PR_BODY || '',
   prAuthor: process.env.PR_AUTHOR || '',
@@ -236,29 +250,6 @@ async function loadConfig() {
   }
 }
 
-/**
- * Deep merge two objects
- */
-function deepMerge(target, source) {
-  const result = { ...target };
-  for (const key in source) {
-    if (source[key] instanceof Object && key in target) {
-      result[key] = deepMerge(target[key], source[key]);
-    } else {
-      result[key] = source[key];
-    }
-  }
-  return result;
-}
-
-/**
- * Ensure a value is an array (YAML sometimes parses arrays as objects)
- */
-function ensureArray(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  return Object.values(value);
-}
 
 /**
  * Normalize config to ensure all array fields are actually arrays
@@ -275,39 +266,6 @@ function normalizeConfig(config) {
   };
 }
 
-/**
- * Check if a file should be ignored based on patterns
- */
-function shouldIgnoreFile(filename, ignorePatterns) {
-  const patterns = ignorePatterns || [];
-  return patterns.some(pattern => {
-    const regexPattern = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*\*/g, '.*')
-      .replace(/\*/g, '[^/]*')
-      .replace(/\?/g, '.');
-    return new RegExp(`^${regexPattern}$`).test(filename);
-  });
-}
-
-/**
- * Detect the programming language from file extension
- */
-function detectLanguage(filename) {
-  const ext = path.extname(filename).toLowerCase();
-  const languageMap = {
-    '.cs': 'csharp',
-    '.csx': 'csharp',
-    '.ts': 'typescript',
-    '.tsx': 'typescript',
-    '.js': 'javascript',
-    '.jsx': 'javascript',
-    '.py': 'python',
-    '.pyw': 'python',
-    '.pyi': 'python'
-  };
-  return languageMap[ext] || 'unknown';
-}
 
 // ============================================================================
 // Feature: Review Caching
@@ -925,8 +883,8 @@ async function createAutoFixPR(config, fixes, reviews) {
     fixesByFile.get(fix.file).push(fix);
   }
 
-  const branchPrefix = config.autoFix.branchPrefix || 'ai-fix/';
-  const fixBranch = `${branchPrefix}pr-${context.prNumber}-${Date.now()}`;
+  const branchPrefix = sanitizeBranchName(config.autoFix.branchPrefix || 'ai-fix/');
+  const fixBranch = sanitizeBranchName(`${branchPrefix}pr-${context.prNumber}-${Date.now()}`);
 
   try {
     // Create new branch from current head
@@ -1021,17 +979,8 @@ Please review these changes carefully before merging.
 }
 
 // ============================================================================
-// Feature: Severity Threshold
+// Feature: Severity Threshold (uses SEVERITY_LEVELS and getSeverityLevel from lib/utils.js)
 // ============================================================================
-
-const SEVERITY_LEVELS = ['nitpick', 'suggestion', 'warning', 'critical'];
-
-/**
- * Get severity level as number for comparison
- */
-function getSeverityLevel(severity) {
-  return SEVERITY_LEVELS.indexOf(severity);
-}
 
 /**
  * Filter comments based on severity threshold
@@ -1158,138 +1107,8 @@ async function postReviewComment(body, comments = [], event = 'COMMENT') {
 }
 
 // ============================================================================
-// Diff Parsing
+// Diff Parsing (imported from lib/utils.js)
 // ============================================================================
-
-function parseDiff(diffContent) {
-  const files = [];
-  const lines = diffContent.split('\n');
-
-  let currentFile = null;
-  let currentHunk = null;
-  let lineInHunk = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.startsWith('diff --git')) {
-      if (currentFile) {
-        files.push(currentFile);
-      }
-
-      const match = line.match(/diff --git a\/(.*) b\/(.*)/);
-      if (match) {
-        currentFile = {
-          oldPath: match[1],
-          newPath: match[2],
-          hunks: [],
-          additions: 0,
-          deletions: 0
-        };
-      }
-      currentHunk = null;
-      continue;
-    }
-
-    if (line.startsWith('index ') ||
-        line.startsWith('old mode') ||
-        line.startsWith('new mode') ||
-        line.startsWith('new file') ||
-        line.startsWith('deleted file') ||
-        line.startsWith('---') ||
-        line.startsWith('+++')) {
-      continue;
-    }
-
-    if (line.startsWith('@@')) {
-      const hunkMatch = line.match(/@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(.*)?/);
-      if (hunkMatch && currentFile) {
-        currentHunk = {
-          oldStart: parseInt(hunkMatch[1], 10),
-          oldLines: parseInt(hunkMatch[2] || '1', 10),
-          newStart: parseInt(hunkMatch[3], 10),
-          newLines: parseInt(hunkMatch[4] || '1', 10),
-          header: hunkMatch[5]?.trim() || '',
-          changes: []
-        };
-        currentFile.hunks.push(currentHunk);
-        lineInHunk = 0;
-      }
-      continue;
-    }
-
-    if (currentHunk && currentFile) {
-      if (line.startsWith('+')) {
-        currentHunk.changes.push({
-          type: 'add',
-          content: line.substring(1),
-          newLine: currentHunk.newStart + lineInHunk
-        });
-        currentFile.additions++;
-        lineInHunk++;
-      } else if (line.startsWith('-')) {
-        currentHunk.changes.push({
-          type: 'delete',
-          content: line.substring(1),
-          oldLine: currentHunk.oldStart + lineInHunk
-        });
-        currentFile.deletions++;
-      } else if (line.startsWith(' ')) {
-        currentHunk.changes.push({
-          type: 'context',
-          content: line.substring(1),
-          newLine: currentHunk.newStart + lineInHunk
-        });
-        lineInHunk++;
-      }
-    }
-  }
-
-  if (currentFile) {
-    files.push(currentFile);
-  }
-
-  return files;
-}
-
-function calculateDiffPosition(file, targetLine) {
-  let position = 0;
-
-  for (const hunk of file.hunks) {
-    position++; // Count the @@ hunk header
-
-    for (const change of hunk.changes) {
-      position++;
-      // Allow commenting on added lines or context lines that match the target
-      if ((change.type === 'add' || change.type === 'context') && change.newLine === targetLine) {
-        return position;
-      }
-    }
-  }
-
-  // If exact line not found, try to find the closest added line in the same hunk
-  // This helps when Claude references a line that's near but not exactly in the diff
-  position = 0;
-  let closestPosition = null;
-  let closestDistance = Infinity;
-
-  for (const hunk of file.hunks) {
-    position++;
-
-    for (const change of hunk.changes) {
-      position++;
-      if (change.type === 'add' && change.newLine) {
-        const distance = Math.abs(change.newLine - targetLine);
-        if (distance < closestDistance && distance <= 5) { // Within 5 lines
-          closestDistance = distance;
-          closestPosition = position;
-        }
-      }
-    }
-  }
-
-  return closestPosition;
-}
 
 // ============================================================================
 // Claude API Integration

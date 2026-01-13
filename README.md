@@ -4,6 +4,7 @@ Automatically review Pull Requests using Anthropic's Claude AI. This GitHub Acti
 
 ## Features
 
+### Core Features
 - **Automated Code Review**: Triggers automatically on PR events (opened, synchronize, reopened)
 - **Inline Comments**: Posts specific feedback directly on relevant lines
 - **Summary Reports**: Provides an overall assessment with strengths and concerns
@@ -11,6 +12,20 @@ Automatically review Pull Requests using Anthropic's Claude AI. This GitHub Acti
 - **Configurable**: Customize review focus, severity levels, and ignored files
 - **Large PR Handling**: Automatically chunks large diffs for processing
 - **Skip Options**: Disable reviews with labels or title prefixes
+
+### Advanced Features
+- **Review Caching**: Skips re-review if the commit has already been reviewed
+- **Comment Threading**: Updates existing comments instead of creating duplicates
+- **PR Size Warnings**: Alerts when PRs exceed recommended size thresholds
+- **Custom Instructions**: Authors can request specific review focus via PR description
+- **File-Level Ignores**: Skip specific lines/files with `ai-review-ignore` comments
+- **Metrics & Analytics**: Tracks review performance and displays in GitHub Actions Summary
+
+### High-Impact Features
+- **Feedback Loop**: Tracks emoji reactions on review comments to measure effectiveness
+- **Contextual Awareness**: Reads imported/related files for more accurate reviews
+- **Auto-fix PRs**: Can automatically create separate PRs with suggested fixes (disabled by default)
+- **Severity Threshold**: Optionally skip posting reviews for "clean" PRs with only minor issues
 
 ## Quick Start
 
@@ -86,7 +101,101 @@ severity:
   warning: true
   suggestion: true
   nitpick: false  # Hide minor style issues
+
+# PR Size Warning
+prSizeWarning:
+  enabled: true
+  maxLines: 1000
+  maxFiles: 30
+
+# Review Caching
+caching:
+  enabled: true
+
+# Custom Instructions (use <!-- ai-review: focus on X --> in PR description)
+customInstructions:
+  enabled: true
+
+# File-level ignore comments
+inlineIgnore:
+  enabled: true
+  patterns:
+    - "ai-review-ignore"
+    - "ai-review-ignore-next-line"
+    - "ai-review-ignore-file"
+
+# Metrics and Analytics
+metrics:
+  enabled: true
+  showInSummary: true
+  showInComment: true
+
+# Feedback Loop - track reactions on comments
+feedbackLoop:
+  enabled: true
+
+# Contextual Awareness - read related files
+contextualAwareness:
+  enabled: true
+  maxRelatedFiles: 5
+  includeImports: true
+  includeTests: false
+
+# Auto-fix PRs (disabled by default)
+autoFix:
+  enabled: false
+  createSeparatePR: true
+  branchPrefix: 'ai-fix/'
+
+# Severity Threshold
+severityThreshold:
+  enabled: false
+  minSeverityToComment: 'warning'
+  skipCleanPRs: false
 ```
+
+## Using Advanced Features
+
+### Custom Review Instructions
+
+Add special instructions in your PR description to guide the review:
+
+```markdown
+<!-- ai-review: Focus on security vulnerabilities and SQL injection risks -->
+```
+
+### Inline Ignore Comments
+
+Skip specific lines from review:
+
+```typescript
+// ai-review-ignore-next-line
+const legacyCode = doSomethingWeird(); // This line won't be reviewed
+
+const anotherLine = something(); // ai-review-ignore - skip this line too
+```
+
+Skip an entire file by adding at the top:
+```typescript
+// ai-review-ignore-file
+```
+
+### Auto-fix PRs
+
+When enabled, the action can automatically create a separate PR with suggested fixes:
+
+1. Set `autoFix.enabled: true` in your config
+2. The action will collect all `suggestedCode` from the review
+3. A new PR will be created with the fixes applied
+4. Review and merge the fix PR into your feature branch
+
+### Feedback Loop
+
+React to review comments with emojis to provide feedback:
+- **Helpful**: :+1: :heart: :rocket:
+- **Not helpful**: :-1: :confused:
+
+Feedback statistics are displayed in the GitHub Actions Summary.
 
 ## Review Output
 
@@ -205,13 +314,41 @@ Typical costs (approximate):
 - Reviews are posted using the GitHub token with limited permissions
 - Consider reviewing the action's permissions in your organization settings
 
+## Development
+
+### Running Tests
+
+The project includes unit tests for critical utility functions:
+
+```bash
+cd .github/scripts
+npm test           # Run all tests
+npm run test:watch # Run tests in watch mode
+```
+
+### Project Structure
+
+```
+.github/
+├── scripts/
+│   ├── lib/
+│   │   ├── utils.js       # Testable utility functions
+│   │   └── utils.test.js  # Unit tests (46 tests)
+│   ├── review-pr.js       # Main review script
+│   └── package.json       # Dependencies and scripts
+├── workflows/
+│   └── pr-review.yml      # GitHub Action workflow
+└── ai-review.yml          # Configuration file
+```
+
 ## Contributing
 
 Contributions are welcome! Please:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Submit a Pull Request (it will be reviewed by this action!)
+4. Run `npm test` to ensure tests pass
+5. Submit a Pull Request (it will be reviewed by this action!)
 
 ## License
 
