@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Lock files (tracked separately)
+pnpm-lock.yaml
+yarn.lock
+
+# AI Review Cache
+.ai-review-cache/
+
+# Temporary files generated during workflow
+pr_diff.txt
+pr_comments.json
+pr_reviews.json
+changed_files.txt
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# IDE/Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build outputs
+dist/
+build/
+out/
