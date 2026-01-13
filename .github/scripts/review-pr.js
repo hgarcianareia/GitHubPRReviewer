@@ -452,10 +452,19 @@ You MUST respond with valid JSON in this exact format:
       "line": 42,
       "severity": "critical | warning | suggestion | nitpick",
       "category": "security | quality | documentation | testing | convention",
-      "comment": "The specific issue and how to fix it"
+      "comment": "The specific issue and how to fix it",
+      "suggestedCode": "optional - the exact replacement code for this line"
     }
   ]
 }
+
+## Code Suggestions
+When you are CONFIDENT about a fix, include a "suggestedCode" field with the exact replacement code for the line.
+- Only provide suggestedCode when you are certain it will work correctly
+- The suggestedCode should replace the ENTIRE line at the specified line number
+- Do NOT include suggestedCode if the fix requires changes across multiple lines or files
+- Do NOT include suggestedCode if you're unsure about the exact fix
+- Keep the same indentation as the original code
 
 ## Guidelines
 1. Be constructive and specific - explain WHY something is an issue
@@ -730,12 +739,24 @@ function prepareInlineComments(reviews, parsedFiles, config) {
         convention: '📏'
       };
 
+      // Build comment body with optional code suggestion
+      let body = `${severityEmoji[comment.severity] || '💬'} ${categoryEmoji[comment.category] || ''} **${comment.severity?.toUpperCase() || 'INFO'}** (${comment.category || 'general'})
+
+${comment.comment}`;
+
+      // Add GitHub suggestion syntax if suggestedCode is provided
+      if (comment.suggestedCode) {
+        body += `
+
+\`\`\`suggestion
+${comment.suggestedCode}
+\`\`\``;
+      }
+
       comments.push({
         path: comment.file,
         position: position,
-        body: `${severityEmoji[comment.severity] || '💬'} ${categoryEmoji[comment.category] || ''} **${comment.severity?.toUpperCase() || 'INFO'}** (${comment.category || 'general'})
-
-${comment.comment}`
+        body: body
       });
     }
   }
