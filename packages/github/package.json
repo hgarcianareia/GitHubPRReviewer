@@ -1,6 +1,6 @@
 {
   "name": "@hgarcianareia/ai-pr-review-github",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GitHub adapter for AI-powered PR reviews",
   "type": "module",
   "main": "src/index.js",
