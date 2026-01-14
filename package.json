@@ -10,12 +10,12 @@
   ],
   "scripts": {
     "test": "npm test --workspaces",
-    "test:core": "npm test -w @nareia/ai-pr-review-core",
-    "test:github": "npm test -w @nareia/ai-pr-review-github",
-    "review": "npm run review -w @nareia/ai-pr-review-github",
+    "test:core": "npm test -w @hernangarcia/ai-pr-review-core",
+    "test:github": "npm test -w @hernangarcia/ai-pr-review-github",
+    "review": "npm run review -w @hernangarcia/ai-pr-review-github",
     "lint": "echo 'No linting configured yet'",
-    "publish:core": "npm publish -w @nareia/ai-pr-review-core",
-    "publish:github": "npm publish -w @nareia/ai-pr-review-github",
+    "publish:core": "npm publish -w @hernangarcia/ai-pr-review-core",
+    "publish:github": "npm publish -w @hernangarcia/ai-pr-review-github",
     "publish:all": "npm run publish:core && npm run publish:github"
   },
   "engines": {
