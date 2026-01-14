@@ -12,8 +12,7 @@
     "ai-pr-review-github": "./src/cli.js"
   },
   "files": [
-    "src/**/*.js",
-    "workflow/**/*.yml"
+    "src/**/*.js"
   ],
   "scripts": {
     "review": "node src/cli.js",
@@ -28,7 +27,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hgarcianareia/ai-pr-review-github.git"
+    "url": "git+https://github.com/hgarcianareia/GitHubPRReviewer.git",
+    "directory": "packages/github"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

@@ -23,8 +23,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Nareia/GitHubPRReviewer.git"
+    "url": "git+https://github.com/hgarcianareia/GitHubPRReviewer.git"
   },
-  "author": "Nareia",
+  "author": "hgarcianareia",
   "license": "MIT"
 }

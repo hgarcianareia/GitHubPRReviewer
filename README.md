@@ -26,33 +26,20 @@ Automatically review Pull Requests using Anthropic's Claude AI. This GitHub Acti
 3. Name: `ANTHROPIC_API_KEY`
 4. Value: Your Anthropic API key
 
-### Step 2: Copy the Workflow Files
+### Step 2: Copy the Workflow File
 
-Copy the following files from this repository to your target repository:
+Copy `.github/workflows/pr-review.yml` from this repository to your target repository:
 
 ```
 .github/
 ├── workflows/
 │   └── pr-review.yml      # GitHub Action workflow
-├── scripts/
-│   ├── review-pr.js       # Main review script
-│   ├── lib/
-│   │   └── utils.js       # Utility functions
-│   ├── package.json       # Node.js dependencies
-│   └── package-lock.json  # Lock file
 └── ai-review.yml          # Configuration (optional)
 ```
 
 ### Step 3: Install Dependencies
 
-The action requires Node.js packages. Run this once to generate the lock file:
-
-```bash
-cd .github/scripts
-npm install
-```
-
-Commit the generated `package-lock.json` file.
+The workflow will automatically install the npm packages. Ensure your `package.json` includes the dependencies or they will be installed from npm.
 
 ### Step 4: Verify Permissions
 
@@ -907,25 +894,37 @@ This can happen when:
 
 ### Project Structure
 
+This is a monorepo with two npm packages:
+
 ```
-.github/
-├── scripts/
-│   ├── lib/
-│   │   ├── utils.js       # Testable utility functions
-│   │   └── utils.test.js  # Unit tests (120 tests)
-│   ├── review-pr.js       # Main review script (~1700 lines)
-│   └── package.json       # Dependencies and scripts
-├── workflows/
-│   └── pr-review.yml      # GitHub Action workflow
-└── ai-review.yml          # Configuration file
+GitHubPRReviewer/
+├── packages/
+│   ├── core/                    # @hgarcianareia/ai-pr-review-core
+│   │   └── src/
+│   │       ├── index.js         # Package exports
+│   │       ├── review-engine.js # Main review logic
+│   │       ├── platform-adapter.js # Platform abstraction
+│   │       ├── utils.js         # Utility functions
+│   │       └── utils.test.js    # Unit tests
+│   └── github/                  # @hgarcianareia/ai-pr-review-github
+│       └── src/
+│           ├── index.js         # Package exports
+│           ├── cli.js           # CLI entry point
+│           └── github-adapter.js # GitHub-specific implementation
+├── .github/
+│   ├── workflows/
+│   │   └── pr-review.yml        # GitHub Action workflow
+│   └── ai-review.yml            # Default configuration
+├── package.json                 # Monorepo root (workspaces)
+└── README.md
 ```
 
 ### Running Tests
 
 ```bash
-cd .github/scripts
-npm test           # Run all tests
-npm run test:watch # Run tests in watch mode
+npm test           # Run all tests in all packages
+npm test:core      # Run core package tests only
+npm test:github    # Run github package tests only
 ```
 
 ### Dependencies

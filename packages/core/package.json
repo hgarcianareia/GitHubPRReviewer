@@ -26,7 +26,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hgarcianareia/ai-pr-review-core.git"
+    "url": "git+https://github.com/hgarcianareia/GitHubPRReviewer.git",
+    "directory": "packages/core"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
