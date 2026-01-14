@@ -50,14 +50,9 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
+      - name: Install AI Review package
+        run: npm install @hgarcianareia/ai-pr-review-github@latest
 
       - name: Check for config file
         id: config
@@ -139,8 +134,7 @@ jobs:
           AI_REVIEW_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.action }}
           PR_COMMITS: ${{ github.event.pull_request.commits || 0 }}
           CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
-        run: |
-          node packages/github/src/cli.js
+        run: npx ai-pr-review-github
 
       - name: Save review cache
         if: always()

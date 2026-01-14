@@ -37,11 +37,7 @@ Copy `.github/workflows/pr-review.yml` from this repository to your target repos
 └── ai-review.yml          # Configuration (optional)
 ```
 
-### Step 3: Install Dependencies
-
-The workflow will automatically install the npm packages. Ensure your `package.json` includes the dependencies or they will be installed from npm.
-
-### Step 4: Verify Permissions
+### Step 3: Verify Permissions
 
 The workflow requires these permissions (already configured in `pr-review.yml`):
 
@@ -51,7 +47,7 @@ permissions:
   pull-requests: write  # Post reviews and comments on PRs
 ```
 
-### Step 5: Create Your First PR
+### Step 4: Create Your First PR
 
 The action will automatically run when you:
 - Open a new Pull Request
