@@ -29,7 +29,7 @@
     "url": "git+https://github.com/hgarcianareia/ai-pr-review-core.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "keywords": [
     "ai",
