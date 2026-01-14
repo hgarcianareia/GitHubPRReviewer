@@ -322,10 +322,13 @@ export function parseDiff(diffContent) {
  * @returns {number|null} - The diff position or null if not found
  */
 export function calculateDiffPosition(file, targetLine) {
+  // GitHub's position is 1-indexed starting from the first line of content
+  // after the @@ hunk header. The @@ header itself is NOT counted.
   let position = 0;
 
   for (const hunk of file.hunks) {
-    position++; // Count the @@ hunk header
+    // Note: Don't count the @@ hunk header - GitHub positions start at 1
+    // for the first actual content line after the header
 
     for (const change of hunk.changes) {
       position++;
@@ -342,7 +345,7 @@ export function calculateDiffPosition(file, targetLine) {
   let closestDistance = Infinity;
 
   for (const hunk of file.hunks) {
-    position++;
+    // Note: Don't count the @@ hunk header
 
     for (const change of hunk.changes) {
       position++;
