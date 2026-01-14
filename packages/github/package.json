@@ -31,7 +31,7 @@
     "directory": "packages/github"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "keywords": [
     "ai",
