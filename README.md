@@ -952,20 +952,3 @@ npm run test:watch # Run tests in watch mode
 | Medium | 500-2000 | $0.05-0.15 |
 | Large | 2000+ | $0.15-0.50+ |
 
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `npm test` to ensure tests pass
-5. Submit a Pull Request (it will be reviewed by this action!)
-
----
-
-## License
-
-MIT License - See LICENSE file for details.
