@@ -561,12 +561,16 @@ describe('calculateDiffPosition', () => {
 
   it('should find position for added lines', () => {
     const position = calculateDiffPosition(sampleFile, 2);
-    assert.strictEqual(position, 4); // hunk header (1) + context (1) + delete (1) + add (1) = 4
+    // GitHub positions start at 1 for first content line after @@ header
+    // context (1) + delete (1) + add (1) = 3
+    assert.strictEqual(position, 3);
   });
 
   it('should find position for context lines', () => {
     const position = calculateDiffPosition(sampleFile, 1);
-    assert.strictEqual(position, 2); // hunk header (1) + context (1) = 2
+    // GitHub positions start at 1 for first content line after @@ header
+    // context (1) = 1
+    assert.strictEqual(position, 1);
   });
 
   it('should return null for lines not in diff', () => {
