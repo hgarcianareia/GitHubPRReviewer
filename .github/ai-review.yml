@@ -138,7 +138,7 @@ autoFix:
 # Severity Threshold - filter comments by minimum severity
 severityThreshold:
   # Enable severity filtering
-  enabled: false
+  enabled: true
   # Minimum severity level to post comments (critical, warning, suggestion, nitpick)
   minSeverityToComment: 'warning'
   # Skip posting review entirely if no issues above threshold
