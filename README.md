@@ -75,6 +75,10 @@ enabled: true
 # Claude model to use
 model: claude-sonnet-4-5-20250929
 
+# Temperature for API calls (0 = deterministic, 1 = creative)
+# Lower values produce more consistent severity ratings
+temperature: 0
+
 # Review focus areas
 reviewAreas:
   codeQuality: true

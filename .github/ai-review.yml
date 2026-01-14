@@ -7,6 +7,10 @@ model: claude-sonnet-4-5-20250929
 # Maximum tokens for Claude's response
 maxTokens: 4096
 
+# Temperature for API calls (0.0 = deterministic, 1.0 = creative)
+# Lower values produce more consistent severity ratings across runs
+temperature: 0
+
 # Review focus areas - toggle which aspects to review
 reviewAreas:
   # Clean code, readability, maintainability
