@@ -208,6 +208,9 @@ function safeValidateEnv(name, validator, defaultValue = undefined) {
 // Check if this is a manual dispatch (workflow_dispatch trigger)
 const isManualDispatch = process.env.GITHUB_EVENT_NAME === 'manual';
 
+// Debug: Log the env var value for troubleshooting
+console.log(`[DEBUG] GITHUB_EVENT_NAME='${process.env.GITHUB_EVENT_NAME}', isManualDispatch=${isManualDispatch}`);
+
 const context = {
   owner: safeValidateEnv('REPO_OWNER', validateRepoOwner),
   repo: safeValidateEnv('REPO_NAME', validateRepoName),
