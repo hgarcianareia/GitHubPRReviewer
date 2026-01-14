@@ -1,0 +1,73 @@
+# Bitbucket Pipelines: AI-Powered PR Review with Claude
+# Automatically reviews Pull Requests using Anthropic's Claude API
+#
+# Configuration:
+#   1. Add these repository variables (Repository Settings > Repository variables):
+#      - ANTHROPIC_API_KEY (secured) - Your Anthropic API key
+#      - BITBUCKET_USERNAME (secured) - Your Bitbucket username for API authentication
+#      - BITBUCKET_TOKEN (secured) - App Password with these permissions:
+#          * Repositories: Read
+#          * Pull requests: Read and Write
+#
+#   2. Optionally create .bitbucket/ai-review.yml for custom settings
+#
+#   3. Use 'skip-ai-review' in PR title to skip reviews
+#
+# Note: BITBUCKET_USERNAME is required because Bitbucket Pipelines does not
+# provide the username as a built-in variable. Use the same username you
+# created the App Password with.
+
+image: node:20
+
+definitions:
+  caches:
+    npm: ~/.npm
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: AI PR Review
+          caches:
+            - npm
+          script:
+            # Install the AI review package
+            - npm install @hgarcianareia/ai-pr-review-bitbucket@latest
+
+            # Fetch PR data using Bitbucket API
+            - |
+              echo "Fetching PR #${BITBUCKET_PR_ID} data..."
+
+              # Get PR diff
+              curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
+                > pr_diff.txt
+
+              # Get changed files
+              curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
+                | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
+
+              # Get existing comments
+              curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
+                > pr_comments.json
+
+            # Check for skip flag in PR title
+            - |
+              PR_TITLE=$(curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}" \
+                | jq -r '.title')
+
+              if echo "$PR_TITLE" | grep -qi "skip-ai-review"; then
+                echo "Skipping AI review (skip-ai-review found in PR title)"
+                exit 0
+              fi
+
+            # Run the AI review
+            - npx ai-pr-review-bitbucket
+
+          artifacts:
+            - pr_diff.txt
+            - changed_files.txt
+            - pr_comments.json

@@ -1,0 +1,47 @@
+{
+  "name": "@hgarcianareia/ai-pr-review-bitbucket",
+  "version": "1.0.0",
+  "description": "Bitbucket Cloud adapter for AI-powered PR reviews",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./adapter": "./src/bitbucket-adapter.js"
+  },
+  "bin": {
+    "ai-pr-review-bitbucket": "./src/cli.js"
+  },
+  "files": [
+    "src/**/*.js"
+  ],
+  "scripts": {
+    "review": "node src/cli.js",
+    "test": "echo 'No tests configured yet'"
+  },
+  "dependencies": {
+    "@hgarcianareia/ai-pr-review-core": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hgarcianareia/GitHubPRReviewer.git",
+    "directory": "packages/bitbucket"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "ai",
+    "code-review",
+    "pull-request",
+    "bitbucket",
+    "bitbucket-cloud",
+    "bitbucket-pipelines",
+    "claude",
+    "anthropic"
+  ],
+  "author": "hgarcianareia",
+  "license": "MIT"
+}

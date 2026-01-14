@@ -2,21 +2,24 @@
   "name": "ai-pr-review-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "AI-powered PR review monorepo - Core library and GitHub adapter",
+  "description": "AI-powered PR review monorepo - Core library with GitHub and Bitbucket adapters",
   "type": "module",
   "workspaces": [
     "packages/core",
-    "packages/github"
+    "packages/github",
+    "packages/bitbucket"
   ],
   "scripts": {
     "test": "npm test --workspaces",
     "test:core": "npm test -w @hgarcianareia/ai-pr-review-core",
     "test:github": "npm test -w @hgarcianareia/ai-pr-review-github",
+    "test:bitbucket": "npm test -w @hgarcianareia/ai-pr-review-bitbucket",
     "review": "npm run review -w @hgarcianareia/ai-pr-review-github",
     "lint": "echo 'No linting configured yet'",
     "publish:core": "npm publish -w @hgarcianareia/ai-pr-review-core",
     "publish:github": "npm publish -w @hgarcianareia/ai-pr-review-github",
-    "publish:all": "npm run publish:core && npm run publish:github"
+    "publish:bitbucket": "npm publish -w @hgarcianareia/ai-pr-review-bitbucket",
+    "publish:all": "npm run publish:core && npm run publish:github && npm run publish:bitbucket"
   },
   "engines": {
     "node": ">=20.0.0"
