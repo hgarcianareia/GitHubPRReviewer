@@ -60,6 +60,7 @@ const DEFAULT_CONFIG = {
   enabled: true,
   model: 'claude-sonnet-4-5-20250929',
   maxTokens: 4096,
+  temperature: 0,  // Use 0 for deterministic, consistent severity ratings
   reviewAreas: {
     codeQuality: true,
     security: true,
@@ -1161,6 +1162,7 @@ async function reviewWithClaude(config, files, diff, customInstructions, related
       () => anthropic.messages.create({
         model: config.model,
         max_tokens: config.maxTokens,
+        temperature: config.temperature ?? 0,
         system: systemPrompt,
         messages: [
           {
