@@ -8,8 +8,6 @@ Automatically review Pull Requests using Anthropic's Claude AI. This GitHub Acti
 - [Detailed Configuration](#detailed-configuration)
 - [Detailed Implemented Features](#detailed-implemented-features)
 - [Review Output](#review-output)
-- [Troubleshooting](#troubleshooting)
-- [Development](#development)
 
 ---
 
