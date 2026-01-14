@@ -4,7 +4,10 @@
  * Uses Claude (Anthropic) to perform comprehensive code reviews on Pull Requests.
  * Posts inline comments and a summary review on the PR.
  *
+ * Supports both GitHub Actions and Bitbucket Pipelines through the platform adapter pattern.
+ *
  * Features:
+ *   - Cross-platform support (GitHub, Bitbucket)
  *   - Comment threading (update existing comments instead of duplicates)
  *   - Auto-dismiss stale reviews when issues are fixed
  *   - File-level ignore comments (ai-review-ignore)
@@ -15,33 +18,24 @@
  *
  * Environment Variables Required:
  *   - ANTHROPIC_API_KEY: API key for Claude
- *   - GITHUB_TOKEN: GitHub token for PR interactions
- *   - PR_NUMBER: Pull request number
- *   - REPO_OWNER: Repository owner
- *   - REPO_NAME: Repository name
- *   - BASE_SHA: Base commit SHA
- *   - HEAD_SHA: Head commit SHA
+ *   - Platform-specific: See platform adapters for details
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { Octokit } from '@octokit/rest';
 import fs from 'fs/promises';
 import yaml from 'js-yaml';
 import path from 'path';
 
+// Import platform adapter factory
+import { createPlatformAdapter, detectPlatform } from './lib/platform-adapter.js';
+
 // Import utility functions (also used for testing)
 import {
-  parsePRNumber,
-  validateRepoOwner,
-  validateRepoName,
-  validateGitSha,
-  sanitizeBranchName,
   shouldIgnoreFile,
   detectLanguage,
   deepMerge,
   ensureArray,
   parseDiff,
-  calculateDiffPosition,
   getSeverityLevel,
   SEVERITY_LEVELS,
   extractCustomInstructions,
@@ -139,15 +133,6 @@ const RATE_LIMIT = {
   maxDelayMs: 30000
 };
 
-// Git command timeout configuration (in milliseconds)
-const GIT_TIMEOUT = {
-  local: 30000,    // 30s for local operations (stash, checkout, add, commit)
-  network: 120000  // 120s for network operations (push)
-};
-
-// AI Review marker for identifying our comments
-const AI_REVIEW_MARKER = '<!-- ai-pr-review -->';
-
 // ============================================================================
 // Initialization
 // ============================================================================
@@ -158,17 +143,6 @@ if (!process.env.ANTHROPIC_API_KEY) {
   console.error('[FATAL] ANTHROPIC_API_KEY is required');
   console.error('='.repeat(60));
   console.error('  Please add ANTHROPIC_API_KEY to your repository secrets.');
-  console.error('  See: https://docs.github.com/en/actions/security-guides/encrypted-secrets');
-  console.error('='.repeat(60));
-  process.exit(1);
-}
-
-if (!process.env.GITHUB_TOKEN) {
-  console.error('='.repeat(60));
-  console.error('[FATAL] GITHUB_TOKEN is required');
-  console.error('='.repeat(60));
-  console.error('  The GITHUB_TOKEN should be automatically provided by GitHub Actions.');
-  console.error('  If missing, check your workflow permissions configuration.');
   console.error('='.repeat(60));
   process.exit(1);
 }
@@ -177,109 +151,11 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
-const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN
-});
+// Platform adapter will be initialized in main()
+let platformAdapter = null;
 
-/**
- * Safely validate an environment variable with user-friendly error message
- * @param {string} name - Environment variable name
- * @param {Function} validator - Validation function
- * @param {*} defaultValue - Optional default if not required
- */
-function safeValidateEnv(name, validator, defaultValue = undefined) {
-  try {
-    return validator(process.env[name]);
-  } catch (error) {
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    console.error('='.repeat(60));
-    console.error(`[FATAL] ${name} Validation Failed`);
-    console.error('='.repeat(60));
-    console.error(`  ${error.message}`);
-    console.error('');
-    console.error('Please check your GitHub Actions workflow configuration.');
-    console.error('='.repeat(60));
-    process.exit(1);
-  }
-}
-
-// Check if this is a manual dispatch (workflow_dispatch trigger)
-// Note: We use AI_REVIEW_TRIGGER instead of GITHUB_EVENT_NAME because GitHub's built-in
-// GITHUB_EVENT_NAME cannot be overridden via the workflow env directive for Node.js
-const isManualDispatch = process.env.AI_REVIEW_TRIGGER === 'manual';
-
-const context = {
-  owner: safeValidateEnv('REPO_OWNER', validateRepoOwner),
-  repo: safeValidateEnv('REPO_NAME', validateRepoName),
-  prNumber: safeValidateEnv('PR_NUMBER', parsePRNumber),
-  prTitle: process.env.PR_TITLE || '',
-  prBody: process.env.PR_BODY || '',
-  prAuthor: process.env.PR_AUTHOR || '',
-  // For manual dispatch, BASE_SHA may be empty - will be loaded from pr_metadata.json
-  baseSha: isManualDispatch
-    ? (process.env.BASE_SHA || null)
-    : safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
-  headSha: safeValidateEnv('HEAD_SHA', (v) => validateGitSha(v, 'HEAD_SHA')),
-  eventName: process.env.AI_REVIEW_TRIGGER || 'opened',
-  cacheHit: process.env.CACHE_HIT === 'true'
-};
-
-/**
- * Load PR metadata from pr_metadata.json for manual dispatch
- * This file is created by the workflow for workflow_dispatch triggers
- */
-async function loadPRMetadata() {
-  if (!isManualDispatch) return;
-
-  try {
-    const metadataContent = await fs.readFile('pr_metadata.json', 'utf-8');
-    const metadata = JSON.parse(metadataContent);
-
-    // Fill in missing context from metadata
-    context.prTitle = metadata.title || context.prTitle;
-    context.prBody = metadata.body || context.prBody;
-    context.prAuthor = metadata.author?.login || context.prAuthor;
-    context.baseSha = metadata.baseRefOid || context.baseSha;
-    // Note: headSha is NOT overwritten - it's already validated from HEAD_SHA env var
-
-    log('info', 'Loaded PR metadata for manual dispatch', {
-      title: context.prTitle,
-      author: context.prAuthor,
-      baseSha: context.baseSha
-    });
-  } catch (error) {
-    log('error', 'Failed to load pr_metadata.json', { error: error.message });
-    throw new Error('pr_metadata.json is required for workflow_dispatch trigger');
-  }
-
-  // Validate baseSha after loading metadata
-  if (!context.baseSha) {
-    console.error('='.repeat(60));
-    console.error('[FATAL] BASE_SHA Validation Failed');
-    console.error('='.repeat(60));
-    console.error('  BASE_SHA could not be determined from pr_metadata.json');
-    console.error('');
-    console.error('Please check your GitHub Actions workflow configuration.');
-    console.error('='.repeat(60));
-    process.exit(1);
-  }
-
-  // Validate the SHA format
-  try {
-    validateGitSha(context.baseSha, 'BASE_SHA');
-  } catch (error) {
-    console.error('='.repeat(60));
-    console.error('[FATAL] BASE_SHA Validation Failed');
-    console.error('='.repeat(60));
-    console.error(`  ${error.message}`);
-    console.error('');
-    console.error('Please check your GitHub Actions workflow configuration.');
-    console.error('='.repeat(60));
-    process.exit(1);
-  }
-}
+// Context will be loaded from the platform adapter
+let context = null;
 
 // Metrics tracking
 const metrics = {
@@ -467,18 +343,16 @@ function filterIgnoredContentWithConfig(diff, config) {
 
 /**
  * Get existing AI review comments on the PR
+ * Uses the platform adapter for cross-platform support
  */
 async function getExistingAIComments() {
-  try {
-    const commentsJson = await fs.readFile('pr_comments.json', 'utf-8');
-    const comments = JSON.parse(commentsJson);
+  if (!platformAdapter) {
+    log('warn', 'Platform adapter not initialized');
+    return [];
+  }
 
-    // Filter for our AI review comments
-    return comments.filter(c =>
-      c.body?.includes(AI_REVIEW_MARKER) ||
-      c.body?.includes('🤖') ||
-      c.body?.includes('AI Code Review')
-    );
+  try {
+    return await platformAdapter.getExistingComments();
   } catch (error) {
     log('warn', 'Could not load existing comments', { error: error.message });
     return [];
@@ -487,17 +361,16 @@ async function getExistingAIComments() {
 
 /**
  * Get existing AI reviews on the PR
+ * Uses the platform adapter for cross-platform support
  */
 async function getExistingAIReviews() {
-  try {
-    const reviewsJson = await fs.readFile('pr_reviews.json', 'utf-8');
-    const reviews = JSON.parse(reviewsJson);
+  if (!platformAdapter) {
+    log('warn', 'Platform adapter not initialized');
+    return [];
+  }
 
-    // Filter for our AI reviews
-    return reviews.filter(r =>
-      r.body?.includes(AI_REVIEW_MARKER) ||
-      r.body?.includes('🤖 AI Code Review')
-    );
+  try {
+    return await platformAdapter.getExistingReviews();
   } catch (error) {
     log('warn', 'Could not load existing reviews', { error: error.message });
     return [];
@@ -553,9 +426,16 @@ async function checkAndDismissStaleReviews(config, newReviews) {
 
 /**
  * Get feedback (reactions) on previous AI review comments
+ * Uses platform adapter for cross-platform support
  */
 async function getReviewFeedback(config) {
   if (!config.feedbackLoop?.enabled) {
+    return null;
+  }
+
+  // Check if platform supports reactions
+  if (!platformAdapter?.getCapabilities().supportsReactions) {
+    log('info', 'Platform does not support reactions, skipping feedback collection');
     return null;
   }
 
@@ -574,66 +454,36 @@ async function getReviewFeedback(config) {
     // Check reactions on inline comments
     for (const comment of existingComments) {
       try {
-        const reactions = await octokit.reactions.listForPullRequestReviewComment({
-          owner: context.owner,
-          repo: context.repo,
-          comment_id: comment.id
-        });
+        const reactions = await platformAdapter.getCommentReactions(comment.id);
+        if (reactions) {
+          feedback.positive += reactions.positive;
+          feedback.negative += reactions.negative;
+          feedback.total += reactions.positive + reactions.negative;
 
-        const positive = reactions.data.filter(r =>
-          ['+1', 'heart', 'rocket', 'hooray'].includes(r.content)
-        ).length;
-        const negative = reactions.data.filter(r =>
-          ['-1', 'confused'].includes(r.content)
-        ).length;
-
-        feedback.positive += positive;
-        feedback.negative += negative;
-        feedback.total += positive + negative;
-
-        if (positive > 0 || negative > 0) {
-          feedback.byComment.push({
-            id: comment.id,
-            file: comment.path,
-            line: comment.line,
-            positive,
-            negative
-          });
+          if (reactions.positive > 0 || reactions.negative > 0) {
+            feedback.byComment.push({
+              id: comment.id,
+              file: comment.path,
+              line: comment.line,
+              positive: reactions.positive,
+              negative: reactions.negative
+            });
+          }
         }
       } catch (error) {
         // Ignore individual comment errors
       }
     }
 
-    // Check reactions on review body comments
+    // Check reactions on reviews
     for (const review of existingReviews) {
       if (review.id) {
         try {
-          // Get the review comments which may have reactions
-          const reviewComments = await octokit.pulls.listCommentsForReview({
-            owner: context.owner,
-            repo: context.repo,
-            pull_number: context.prNumber,
-            review_id: review.id
-          });
-
-          for (const rc of reviewComments.data) {
-            const reactions = await octokit.reactions.listForPullRequestReviewComment({
-              owner: context.owner,
-              repo: context.repo,
-              comment_id: rc.id
-            });
-
-            const positive = reactions.data.filter(r =>
-              ['+1', 'heart', 'rocket', 'hooray'].includes(r.content)
-            ).length;
-            const negative = reactions.data.filter(r =>
-              ['-1', 'confused'].includes(r.content)
-            ).length;
-
-            feedback.positive += positive;
-            feedback.negative += negative;
-            feedback.total += positive + negative;
+          const reactions = await platformAdapter.getReviewReactions(review.id);
+          if (reactions) {
+            feedback.positive += reactions.positive;
+            feedback.negative += reactions.negative;
+            feedback.total += reactions.positive + reactions.negative;
           }
         } catch (error) {
           // Ignore individual review errors
@@ -650,15 +500,11 @@ async function getReviewFeedback(config) {
 }
 
 /**
- * Write feedback summary to GitHub Actions Summary
+ * Write feedback summary to platform summary
+ * Uses platform adapter for cross-platform support
  */
 async function writeFeedbackSummary(feedback, config) {
   if (!config.feedbackLoop?.enabled || !feedback || feedback.total === 0) {
-    return;
-  }
-
-  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-  if (!summaryPath) {
     return;
   }
 
@@ -688,8 +534,8 @@ async function writeFeedbackSummary(feedback, config) {
   }
 
   try {
-    await fs.appendFile(summaryPath, summary);
-    log('info', 'Wrote feedback summary to GitHub Actions Summary');
+    await platformAdapter.writeMetricsSummary(summary);
+    log('info', 'Wrote feedback summary');
   } catch (error) {
     log('warn', 'Failed to write feedback summary', { error: error.message });
   }
@@ -871,83 +717,25 @@ function applyFixesToContent(content, fixes) {
 
 /**
  * Create a separate PR with auto-fixes
+ * Uses platform adapter for cross-platform support
  */
 async function createAutoFixPR(config, fixes, reviews) {
   if (!config.autoFix?.enabled || fixes.length === 0) {
     return null;
   }
 
-  // Group fixes by file
-  const fixesByFile = new Map();
-  for (const fix of fixes) {
-    if (!fixesByFile.has(fix.file)) {
-      fixesByFile.set(fix.file, []);
-    }
-    fixesByFile.get(fix.file).push(fix);
+  // Check if platform supports auto-fix PRs
+  if (!platformAdapter?.getCapabilities().supportsAutoFixPR) {
+    log('info', 'Platform does not support auto-fix PRs');
+    return null;
   }
 
-  const branchPrefix = sanitizeBranchName(config.autoFix.branchPrefix || 'ai-fix/');
-  const fixBranch = sanitizeBranchName(`${branchPrefix}pr-${context.prNumber}-${Date.now()}`);
+  const branchPrefix = config.autoFix.branchPrefix || 'ai-fix/';
+  const branchName = `${branchPrefix}pr-${context.prNumber}-${Date.now()}`;
 
-  try {
-    // Create new branch from current head
-    const { execSync } = await import('child_process');
-
-    // Stash any current changes
-    execSync('git stash', {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: GIT_TIMEOUT.local,
-      killSignal: 'SIGTERM'
-    });
-
-    // Create and checkout new branch
-    execSync(`git checkout -b ${fixBranch}`, {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: GIT_TIMEOUT.local,
-      killSignal: 'SIGTERM'
-    });
-
-    // Apply fixes to each file
-    for (const [filePath, fileFixes] of fixesByFile) {
-      try {
-        const fullPath = path.join(process.cwd(), filePath);
-        const content = await fs.readFile(fullPath, 'utf-8');
-        const fixedContent = applyFixesToContent(content, fileFixes);
-        await fs.writeFile(fullPath, fixedContent, 'utf-8');
-      } catch (error) {
-        log('warn', `Failed to apply fixes to ${filePath}`, { error: error.message });
-      }
-    }
-
-    // Commit changes
-    execSync('git add -A', {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: GIT_TIMEOUT.local,
-      killSignal: 'SIGTERM'
-    });
-    execSync(
-      `git commit -m "fix: Auto-fix AI review suggestions for PR #${context.prNumber}"`,
-      {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: GIT_TIMEOUT.local,
-        killSignal: 'SIGTERM'
-      }
-    );
-
-    // Push branch (network operation - longer timeout)
-    execSync(`git push origin ${fixBranch}`, {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: GIT_TIMEOUT.network,
-      killSignal: 'SIGTERM'
-    });
-
-    // Create PR
-    const prBody = `## 🤖 Auto-fix PR
+  // Create PR
+  const prTitle = `fix: AI review fixes for PR #${context.prNumber}`;
+  const prBody = `## 🤖 Auto-fix PR
 
 This PR contains automatic fixes suggested by the AI code review for PR #${context.prNumber}.
 
@@ -960,68 +748,17 @@ Please review these changes carefully before merging.
 ---
 *Generated automatically by AI PR Review*`;
 
-    // Get the PR's head branch name to base our fix PR on
-    const prInfo = await octokit.pulls.get({
-      owner: context.owner,
-      repo: context.repo,
-      pull_number: context.prNumber
-    });
-    const baseBranch = prInfo.data.head.ref;
+  try {
+    const result = await platformAdapter.createAutoFixPR(branchName, fixes, prTitle, prBody);
 
-    const newPR = await octokit.pulls.create({
-      owner: context.owner,
-      repo: context.repo,
-      title: `fix: AI review fixes for PR #${context.prNumber}`,
-      body: prBody,
-      head: fixBranch,
-      base: baseBranch // Base on the original PR's head branch
-    });
-
-    // Checkout back to original branch
-    execSync('git checkout -', {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: GIT_TIMEOUT.local,
-      killSignal: 'SIGTERM'
-    });
-    execSync('git stash pop || true', {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: GIT_TIMEOUT.local,
-      killSignal: 'SIGTERM'
-    });
-
-    metrics.autoFixPRCreated = true;
-    log('info', 'Created auto-fix PR', { prNumber: newPR.data.number, branch: fixBranch });
-
-    return {
-      prNumber: newPR.data.number,
-      prUrl: newPR.data.html_url,
-      branch: fixBranch,
-      fixCount: fixes.length
-    };
-  } catch (error) {
-    log('error', 'Failed to create auto-fix PR', { error: error.message });
-
-    // Try to restore original state
-    try {
-      const { execSync } = await import('child_process');
-      execSync('git checkout -', {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: GIT_TIMEOUT.local,
-        killSignal: 'SIGTERM'
-      });
-      execSync('git stash pop || true', {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: GIT_TIMEOUT.local,
-        killSignal: 'SIGTERM'
-      });
-    } catch (e) {
-      // Ignore cleanup errors
+    if (result) {
+      metrics.autoFixPRCreated = true;
+      log('info', 'Created auto-fix PR', { prNumber: result.prNumber, branch: result.branch });
     }
 
+    return result;
+  } catch (error) {
+    log('error', 'Failed to create auto-fix PR', { error: error.message });
     return null;
   }
 }
@@ -1072,60 +809,44 @@ function shouldSkipCleanPR(reviews, config) {
 }
 
 // ============================================================================
-// GitHub API Functions
+// Platform API Functions (using adapter)
 // ============================================================================
 
+/**
+ * Get the PR diff content
+ * Uses platform adapter for cross-platform support
+ */
 async function getPRDiff() {
   try {
-    const diffContent = await fs.readFile('pr_diff.txt', 'utf-8');
-    return diffContent;
+    return await platformAdapter.getDiff();
   } catch (error) {
-    log('error', 'Failed to read diff file', { error: error.message });
+    log('error', 'Failed to get diff', { error: error.message });
     throw error;
   }
 }
 
+/**
+ * Get the list of changed files
+ * Uses platform adapter for cross-platform support
+ */
 async function getChangedFiles() {
   try {
-    const filesContent = await fs.readFile('changed_files.txt', 'utf-8');
-    return filesContent.split('\n').filter(f => f.trim());
+    return await platformAdapter.getChangedFiles();
   } catch (error) {
-    log('error', 'Failed to read changed files', { error: error.message });
+    log('error', 'Failed to get changed files', { error: error.message });
     throw error;
   }
 }
 
 /**
  * Post a review comment on the PR
+ * Uses platform adapter for cross-platform support
  */
 async function postReviewComment(body, comments = [], event = 'COMMENT') {
   try {
-    // Add our marker to the body for identification
-    const markedBody = `${AI_REVIEW_MARKER}\n${body}`;
-
-    // GitHub Actions cannot APPROVE PRs by default (security restriction)
-    // Convert APPROVE to COMMENT to avoid 422 errors
-    let safeEvent = event;
-    if (event === 'APPROVE') {
-      log('info', 'Converting APPROVE to COMMENT (GitHub Actions cannot approve PRs)');
-      safeEvent = 'COMMENT';
-    }
-
-    await withRetry(
-      () => octokit.pulls.createReview({
-        owner: context.owner,
-        repo: context.repo,
-        pull_number: context.prNumber,
-        commit_id: context.headSha,
-        body: markedBody,
-        event: safeEvent,
-        comments: comments
-      }),
-      'postReviewComment'
-    );
-
+    await platformAdapter.postReview(body, comments, event);
     metrics.commentsPosted = comments.length;
-    log('info', `Posted review with ${comments.length} inline comments`, { event: safeEvent });
+    log('info', `Posted review with ${comments.length} inline comments`, { event });
   } catch (error) {
     log('error', 'Failed to post review', { error: error.message });
     throw error;
@@ -1488,7 +1209,7 @@ function prepareInlineComments(reviews, parsedFiles, config, existingComments = 
         continue;
       }
 
-      const position = calculateDiffPosition(file, comment.line);
+      const position = platformAdapter.calculateCommentPosition(file, comment.line);
       if (!position) {
         skippedPosition++;
         log('warn', `Could not find line ${comment.line} in diff for ${comment.file} (severity: ${comment.severity})`);
@@ -1551,16 +1272,11 @@ ${comment.suggestedCode}
 // ============================================================================
 
 /**
- * Write metrics to GitHub Actions summary
+ * Write metrics to platform summary
+ * Uses platform adapter for cross-platform support
  */
 async function writeMetricsSummary(config) {
   if (!config.metrics?.enabled || !config.metrics?.showInSummary) {
-    return;
-  }
-
-  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-  if (!summaryPath) {
-    log('warn', 'GITHUB_STEP_SUMMARY not available');
     return;
   }
 
@@ -1588,8 +1304,8 @@ async function writeMetricsSummary(config) {
 `;
 
   try {
-    await fs.appendFile(summaryPath, summary);
-    log('info', 'Wrote metrics to GitHub Actions summary');
+    await platformAdapter.writeMetricsSummary(summary);
+    log('info', 'Wrote metrics summary');
   } catch (error) {
     log('warn', 'Failed to write metrics summary', { error: error.message });
   }
@@ -1600,16 +1316,26 @@ async function writeMetricsSummary(config) {
 // ============================================================================
 
 async function main() {
+  // Detect and initialize platform adapter
+  const platform = detectPlatform();
+  log('info', `Detected platform: ${platform}`);
+
+  try {
+    platformAdapter = await createPlatformAdapter(platform);
+    context = platformAdapter.getContext();
+  } catch (error) {
+    log('error', 'Failed to initialize platform adapter', { error: error.message });
+    process.exit(1);
+  }
+
   log('info', 'Starting AI PR Review', {
+    platform: platformAdapter.getPlatformType(),
     pr: context.prNumber,
     repo: `${context.owner}/${context.repo}`,
-    event: context.eventName,
-    isManualDispatch
+    event: context.eventName
   });
 
   try {
-    // Load PR metadata for manual dispatch (fills in missing context)
-    await loadPRMetadata();
 
     const config = await loadConfig();
 
