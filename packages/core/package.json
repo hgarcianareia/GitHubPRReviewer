@@ -1,0 +1,43 @@
+{
+  "name": "@hgarcianareia/ai-pr-review-core",
+  "version": "1.0.0",
+  "description": "Core library for AI-powered PR reviews using Claude",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./utils": "./src/utils.js",
+    "./platform-adapter": "./src/platform-adapter.js",
+    "./review-engine": "./src/review-engine.js"
+  },
+  "files": [
+    "src/**/*.js"
+  ],
+  "scripts": {
+    "test": "echo 'No tests configured yet'"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependencies": {},
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hgarcianareia/ai-pr-review-core.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "keywords": [
+    "ai",
+    "code-review",
+    "pull-request",
+    "claude",
+    "anthropic"
+  ],
+  "author": "hgarcianareia",
+  "license": "MIT"
+}

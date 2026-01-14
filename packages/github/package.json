@@ -1,0 +1,47 @@
+{
+  "name": "@hgarcianareia/ai-pr-review-github",
+  "version": "1.0.0",
+  "description": "GitHub adapter for AI-powered PR reviews",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./adapter": "./src/github-adapter.js"
+  },
+  "bin": {
+    "ai-pr-review-github": "./src/cli.js"
+  },
+  "files": [
+    "src/**/*.js",
+    "workflow/**/*.yml"
+  ],
+  "scripts": {
+    "review": "node src/cli.js",
+    "test": "echo 'No tests configured yet'"
+  },
+  "dependencies": {
+    "@hgarcianareia/ai-pr-review-core": "^1.0.0",
+    "@octokit/rest": "^21.0.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hgarcianareia/ai-pr-review-github.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "keywords": [
+    "ai",
+    "code-review",
+    "pull-request",
+    "github",
+    "github-actions",
+    "claude",
+    "anthropic"
+  ],
+  "author": "hgarcianareia",
+  "license": "MIT"
+}

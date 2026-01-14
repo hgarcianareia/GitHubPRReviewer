@@ -44,6 +44,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # Full history required for accurate diff between base and head commits.
+          # The gh pr diff command needs access to both the base branch commit and
+          # head commit to generate the correct diff. Shallow clones may miss the
+          # base commit, causing diff generation to fail.
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -51,12 +54,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: .github/scripts/package-lock.json
 
       - name: Install dependencies
+        working-directory: .github/scripts
         run: npm ci
 
       - name: Run tests
+        working-directory: .github/scripts
         run: npm test
 
       - name: Check for config file
@@ -140,7 +145,7 @@ jobs:
           PR_COMMITS: ${{ github.event.pull_request.commits || 0 }}
           CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         run: |
-          node packages/github/src/cli.js
+          node .github/scripts/review-pr.js
 
       - name: Save review cache
         if: always()
