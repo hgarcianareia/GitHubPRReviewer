@@ -205,7 +205,7 @@ function safeValidateEnv(name, validator, defaultValue = undefined) {
   }
 }
 
-// For manual dispatch, BASE_SHA may be empty and loaded later from pr_metadata.json
+// Check if this is a manual dispatch (workflow_dispatch trigger)
 const isManualDispatch = process.env.GITHUB_EVENT_NAME === 'manual';
 
 const context = {
@@ -215,11 +215,69 @@ const context = {
   prTitle: process.env.PR_TITLE || '',
   prBody: process.env.PR_BODY || '',
   prAuthor: process.env.PR_AUTHOR || '',
-  baseSha: isManualDispatch ? (process.env.BASE_SHA || '') : safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
+  // For manual dispatch, BASE_SHA may be empty - will be loaded from pr_metadata.json
+  baseSha: isManualDispatch
+    ? (process.env.BASE_SHA || null)
+    : safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
   headSha: safeValidateEnv('HEAD_SHA', (v) => validateGitSha(v, 'HEAD_SHA')),
   eventName: process.env.GITHUB_EVENT_NAME || 'opened',
   cacheHit: process.env.CACHE_HIT === 'true'
 };
+
+/**
+ * Load PR metadata from pr_metadata.json for manual dispatch
+ * This file is created by the workflow for workflow_dispatch triggers
+ */
+async function loadPRMetadata() {
+  if (!isManualDispatch) return;
+
+  try {
+    const metadataContent = await fs.readFile('pr_metadata.json', 'utf-8');
+    const metadata = JSON.parse(metadataContent);
+
+    // Fill in missing context from metadata
+    context.prTitle = metadata.title || context.prTitle;
+    context.prBody = metadata.body || context.prBody;
+    context.prAuthor = metadata.author?.login || context.prAuthor;
+    context.baseSha = metadata.baseRefOid || context.baseSha;
+    // Note: headSha is NOT overwritten - it's already validated from HEAD_SHA env var
+
+    log('info', 'Loaded PR metadata for manual dispatch', {
+      title: context.prTitle,
+      author: context.prAuthor,
+      baseSha: context.baseSha
+    });
+  } catch (error) {
+    log('error', 'Failed to load pr_metadata.json', { error: error.message });
+    throw new Error('pr_metadata.json is required for workflow_dispatch trigger');
+  }
+
+  // Validate baseSha after loading metadata
+  if (!context.baseSha) {
+    console.error('='.repeat(60));
+    console.error('[FATAL] BASE_SHA Validation Failed');
+    console.error('='.repeat(60));
+    console.error('  BASE_SHA could not be determined from pr_metadata.json');
+    console.error('');
+    console.error('Please check your GitHub Actions workflow configuration.');
+    console.error('='.repeat(60));
+    process.exit(1);
+  }
+
+  // Validate the SHA format
+  try {
+    validateGitSha(context.baseSha, 'BASE_SHA');
+  } catch (error) {
+    console.error('='.repeat(60));
+    console.error('[FATAL] BASE_SHA Validation Failed');
+    console.error('='.repeat(60));
+    console.error(`  ${error.message}`);
+    console.error('');
+    console.error('Please check your GitHub Actions workflow configuration.');
+    console.error('='.repeat(60));
+    process.exit(1);
+  }
+}
 
 // Metrics tracking
 const metrics = {
@@ -358,42 +416,6 @@ async function isCommitAlreadyReviewed(config) {
   }
 
   return false;
-}
-
-// ============================================================================
-// Feature: Manual Dispatch PR Metadata Loading
-// ============================================================================
-
-/**
- * Load PR metadata from pr_metadata.json when triggered via workflow_dispatch.
- * This populates context fields that are normally available from github.event.pull_request
- */
-async function loadPRMetadata() {
-  if (!isManualDispatch) {
-    return;
-  }
-
-  try {
-    const metadataContent = await fs.readFile('pr_metadata.json', 'utf-8');
-    const metadata = JSON.parse(metadataContent);
-
-    // Update context with metadata from GitHub CLI
-    // Note: headSha is NOT overwritten here as it's already validated from the workflow
-    context.prTitle = metadata.title || context.prTitle;
-    context.prBody = metadata.body || context.prBody;
-    context.prAuthor = metadata.author?.login || context.prAuthor;
-    context.baseSha = metadata.baseRefOid || context.baseSha;
-
-    log('info', 'Loaded PR metadata for manual dispatch', {
-      title: context.prTitle?.substring(0, 50),
-      author: context.prAuthor,
-      baseSha: context.baseSha?.substring(0, 7),
-      headSha: context.headSha?.substring(0, 7)
-    });
-  } catch (error) {
-    log('warn', 'Could not load PR metadata for manual dispatch', { error: error.message });
-    // Continue anyway - the review can still work with minimal context
-  }
 }
 
 // ============================================================================
@@ -1579,11 +1601,12 @@ async function main() {
   log('info', 'Starting AI PR Review', {
     pr: context.prNumber,
     repo: `${context.owner}/${context.repo}`,
-    event: context.eventName
+    event: context.eventName,
+    isManualDispatch
   });
 
   try {
-    // Load PR metadata if triggered manually via workflow_dispatch
+    // Load PR metadata for manual dispatch (fills in missing context)
     await loadPRMetadata();
 
     const config = await loadConfig();
