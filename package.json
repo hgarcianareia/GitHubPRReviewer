@@ -1,0 +1,30 @@
+{
+  "name": "ai-pr-review-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered PR review monorepo - Core library and GitHub adapter",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/github"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces",
+    "test:core": "npm test -w @nareia/ai-pr-review-core",
+    "test:github": "npm test -w @nareia/ai-pr-review-github",
+    "review": "npm run review -w @nareia/ai-pr-review-github",
+    "lint": "echo 'No linting configured yet'",
+    "publish:core": "npm publish -w @nareia/ai-pr-review-core",
+    "publish:github": "npm publish -w @nareia/ai-pr-review-github",
+    "publish:all": "npm run publish:core && npm run publish:github"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nareia/GitHubPRReviewer.git"
+  },
+  "author": "Nareia",
+  "license": "MIT"
+}
