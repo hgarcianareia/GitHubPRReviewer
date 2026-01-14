@@ -141,7 +141,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           CONFIG_EXISTS: ${{ steps.config.outputs.config_exists }}
-          GITHUB_EVENT_NAME: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.action }}
+          AI_REVIEW_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.action }}
           PR_COMMITS: ${{ github.event.pull_request.commits || 0 }}
           CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         run: |

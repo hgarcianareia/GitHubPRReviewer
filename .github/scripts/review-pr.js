@@ -206,10 +206,9 @@ function safeValidateEnv(name, validator, defaultValue = undefined) {
 }
 
 // Check if this is a manual dispatch (workflow_dispatch trigger)
-const isManualDispatch = process.env.GITHUB_EVENT_NAME === 'manual';
-
-// Debug: Log the env var value for troubleshooting
-console.log(`[DEBUG] GITHUB_EVENT_NAME='${process.env.GITHUB_EVENT_NAME}', isManualDispatch=${isManualDispatch}`);
+// Note: We use AI_REVIEW_TRIGGER instead of GITHUB_EVENT_NAME because GitHub's built-in
+// GITHUB_EVENT_NAME cannot be overridden via the workflow env directive for Node.js
+const isManualDispatch = process.env.AI_REVIEW_TRIGGER === 'manual';
 
 const context = {
   owner: safeValidateEnv('REPO_OWNER', validateRepoOwner),
@@ -223,7 +222,7 @@ const context = {
     ? (process.env.BASE_SHA || null)
     : safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
   headSha: safeValidateEnv('HEAD_SHA', (v) => validateGitSha(v, 'HEAD_SHA')),
-  eventName: process.env.GITHUB_EVENT_NAME || 'opened',
+  eventName: process.env.AI_REVIEW_TRIGGER || 'opened',
   cacheHit: process.env.CACHE_HIT === 'true'
 };
 
