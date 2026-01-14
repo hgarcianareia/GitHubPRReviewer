@@ -2,12 +2,6 @@
 
 Bitbucket Pipelines adapter for AI-powered PR reviews using Anthropic's Claude.
 
-## Installation
-
-```bash
-npm install @hgarcianareia/ai-pr-review-bitbucket
-```
-
 ## Quick Setup
 
 ### Step 1: Create App Password
@@ -265,6 +259,12 @@ const deprecated = oldMethod();
 ```
 
 ## Programmatic Usage
+
+For custom integrations, install the package directly:
+
+```bash
+npm install @hgarcianareia/ai-pr-review-bitbucket
+```
 
 ```javascript
 import { ReviewEngine } from '@hgarcianareia/ai-pr-review-core';

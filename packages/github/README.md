@@ -2,12 +2,6 @@
 
 GitHub Actions adapter for AI-powered PR reviews using Anthropic's Claude.
 
-## Installation
-
-```bash
-npm install @hgarcianareia/ai-pr-review-github
-```
-
 ## Quick Setup
 
 ### Step 1: Add Repository Secret
@@ -265,6 +259,12 @@ Adding authentication module.
 ```
 
 ## Programmatic Usage
+
+For custom integrations, install the package directly:
+
+```bash
+npm install @hgarcianareia/ai-pr-review-github
+```
 
 ```javascript
 import { ReviewEngine } from '@hgarcianareia/ai-pr-review-core';
