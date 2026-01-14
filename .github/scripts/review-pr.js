@@ -139,6 +139,12 @@ const RATE_LIMIT = {
   maxDelayMs: 30000
 };
 
+// Git command timeout configuration (in milliseconds)
+const GIT_TIMEOUT = {
+  local: 30000,    // 30s for local operations (stash, checkout, add, commit)
+  network: 120000  // 120s for network operations (push)
+};
+
 // AI Review marker for identifying our comments
 const AI_REVIEW_MARKER = '<!-- ai-pr-review -->';
 
@@ -199,6 +205,9 @@ function safeValidateEnv(name, validator, defaultValue = undefined) {
   }
 }
 
+// For manual dispatch, BASE_SHA may be empty and loaded later from pr_metadata.json
+const isManualDispatch = process.env.GITHUB_EVENT_NAME === 'manual';
+
 const context = {
   owner: safeValidateEnv('REPO_OWNER', validateRepoOwner),
   repo: safeValidateEnv('REPO_NAME', validateRepoName),
@@ -206,7 +215,7 @@ const context = {
   prTitle: process.env.PR_TITLE || '',
   prBody: process.env.PR_BODY || '',
   prAuthor: process.env.PR_AUTHOR || '',
-  baseSha: safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
+  baseSha: isManualDispatch ? (process.env.BASE_SHA || '') : safeValidateEnv('BASE_SHA', (v) => validateGitSha(v, 'BASE_SHA')),
   headSha: safeValidateEnv('HEAD_SHA', (v) => validateGitSha(v, 'HEAD_SHA')),
   eventName: process.env.GITHUB_EVENT_NAME || 'opened',
   cacheHit: process.env.CACHE_HIT === 'true'
@@ -349,6 +358,42 @@ async function isCommitAlreadyReviewed(config) {
   }
 
   return false;
+}
+
+// ============================================================================
+// Feature: Manual Dispatch PR Metadata Loading
+// ============================================================================
+
+/**
+ * Load PR metadata from pr_metadata.json when triggered via workflow_dispatch.
+ * This populates context fields that are normally available from github.event.pull_request
+ */
+async function loadPRMetadata() {
+  if (!isManualDispatch) {
+    return;
+  }
+
+  try {
+    const metadataContent = await fs.readFile('pr_metadata.json', 'utf-8');
+    const metadata = JSON.parse(metadataContent);
+
+    // Update context with metadata from GitHub CLI
+    // Note: headSha is NOT overwritten here as it's already validated from the workflow
+    context.prTitle = metadata.title || context.prTitle;
+    context.prBody = metadata.body || context.prBody;
+    context.prAuthor = metadata.author?.login || context.prAuthor;
+    context.baseSha = metadata.baseRefOid || context.baseSha;
+
+    log('info', 'Loaded PR metadata for manual dispatch', {
+      title: context.prTitle?.substring(0, 50),
+      author: context.prAuthor,
+      baseSha: context.baseSha?.substring(0, 7),
+      headSha: context.headSha?.substring(0, 7)
+    });
+  } catch (error) {
+    log('warn', 'Could not load PR metadata for manual dispatch', { error: error.message });
+    // Continue anyway - the review can still work with minimal context
+  }
 }
 
 // ============================================================================
@@ -825,10 +870,20 @@ async function createAutoFixPR(config, fixes, reviews) {
     const { execSync } = await import('child_process');
 
     // Stash any current changes
-    execSync('git stash', { encoding: 'utf-8', stdio: 'pipe' });
+    execSync('git stash', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: GIT_TIMEOUT.local,
+      killSignal: 'SIGTERM'
+    });
 
     // Create and checkout new branch
-    execSync(`git checkout -b ${fixBranch}`, { encoding: 'utf-8', stdio: 'pipe' });
+    execSync(`git checkout -b ${fixBranch}`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: GIT_TIMEOUT.local,
+      killSignal: 'SIGTERM'
+    });
 
     // Apply fixes to each file
     for (const [filePath, fileFixes] of fixesByFile) {
@@ -843,14 +898,29 @@ async function createAutoFixPR(config, fixes, reviews) {
     }
 
     // Commit changes
-    execSync('git add -A', { encoding: 'utf-8', stdio: 'pipe' });
+    execSync('git add -A', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: GIT_TIMEOUT.local,
+      killSignal: 'SIGTERM'
+    });
     execSync(
       `git commit -m "fix: Auto-fix AI review suggestions for PR #${context.prNumber}"`,
-      { encoding: 'utf-8', stdio: 'pipe' }
+      {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        timeout: GIT_TIMEOUT.local,
+        killSignal: 'SIGTERM'
+      }
     );
 
-    // Push branch
-    execSync(`git push origin ${fixBranch}`, { encoding: 'utf-8', stdio: 'pipe' });
+    // Push branch (network operation - longer timeout)
+    execSync(`git push origin ${fixBranch}`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: GIT_TIMEOUT.network,
+      killSignal: 'SIGTERM'
+    });
 
     // Create PR
     const prBody = `## 🤖 Auto-fix PR
@@ -884,8 +954,18 @@ Please review these changes carefully before merging.
     });
 
     // Checkout back to original branch
-    execSync(`git checkout -`, { encoding: 'utf-8', stdio: 'pipe' });
-    execSync('git stash pop || true', { encoding: 'utf-8', stdio: 'pipe' });
+    execSync('git checkout -', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: GIT_TIMEOUT.local,
+      killSignal: 'SIGTERM'
+    });
+    execSync('git stash pop || true', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: GIT_TIMEOUT.local,
+      killSignal: 'SIGTERM'
+    });
 
     metrics.autoFixPRCreated = true;
     log('info', 'Created auto-fix PR', { prNumber: newPR.data.number, branch: fixBranch });
@@ -902,8 +982,18 @@ Please review these changes carefully before merging.
     // Try to restore original state
     try {
       const { execSync } = await import('child_process');
-      execSync(`git checkout -`, { encoding: 'utf-8', stdio: 'pipe' });
-      execSync('git stash pop || true', { encoding: 'utf-8', stdio: 'pipe' });
+      execSync('git checkout -', {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        timeout: GIT_TIMEOUT.local,
+        killSignal: 'SIGTERM'
+      });
+      execSync('git stash pop || true', {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        timeout: GIT_TIMEOUT.local,
+        killSignal: 'SIGTERM'
+      });
     } catch (e) {
       // Ignore cleanup errors
     }
@@ -1493,6 +1583,9 @@ async function main() {
   });
 
   try {
+    // Load PR metadata if triggered manually via workflow_dispatch
+    await loadPRMetadata();
+
     const config = await loadConfig();
 
     if (!config.enabled) {

@@ -11,10 +11,16 @@ name: AI PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
 
 # Ensure only one review runs at a time per PR
 concurrency:
-  group: pr-review-${{ github.event.pull_request.number }}
+  group: pr-review-${{ github.event.inputs.pr_number || github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -27,16 +33,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Skip if PR has 'skip-ai-review' label
+    # Skip if PR has 'skip-ai-review' label (only for pull_request events)
     if: |
-      !contains(github.event.pull_request.labels.*.name, 'skip-ai-review') &&
-      !startsWith(github.event.pull_request.title, '[no-review]')
+      github.event_name == 'workflow_dispatch' ||
+      (!contains(github.event.pull_request.labels.*.name, 'skip-ai-review') &&
+      !startsWith(github.event.pull_request.title, '[no-review]'))
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          fetch-depth: 0  # Full history for accurate diff
+          # Full history required for accurate diff between base and head commits.
+          # The gh pr diff command needs access to both the base branch commit and
+          # head commit to generate the correct diff. Shallow clones may miss the
+          # base commit, causing diff generation to fail.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
@@ -62,32 +73,55 @@ jobs:
             echo "config_exists=false" >> $GITHUB_OUTPUT
           fi
 
+      # Determine PR number for cache key (works with both triggers)
+      - name: Set PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUM="${{ github.event.inputs.pr_number }}"
+            # Fetch head SHA for cache key
+            HEAD_SHA=$(gh pr view "$PR_NUM" --json headRefOid -q '.headRefOid')
+            echo "number=$PR_NUM" >> $GITHUB_OUTPUT
+            echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          fi
+
       # Cache for storing reviewed commit SHAs
       - name: Restore review cache
         id: cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .ai-review-cache
-          key: ai-review-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          key: ai-review-${{ steps.pr.outputs.number }}-${{ steps.pr.outputs.head_sha }}
           restore-keys: |
-            ai-review-${{ github.event.pull_request.number }}-
+            ai-review-${{ steps.pr.outputs.number }}-
 
       - name: Get PR diff
         id: diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
         run: |
           # Get the diff between base and head
-          gh pr diff "${{ github.event.pull_request.number }}" > pr_diff.txt
+          gh pr diff "$PR_NUM" > pr_diff.txt
 
           # Get list of changed files with their status
-          gh pr view "${{ github.event.pull_request.number }}" --json files -q '.files[].path' > changed_files.txt
+          gh pr view "$PR_NUM" --json files -q '.files[].path' > changed_files.txt
 
           # Get PR comments for threading detection
-          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments" > pr_comments.json || echo "[]" > pr_comments.json
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUM/comments" > pr_comments.json || echo "[]" > pr_comments.json
 
           # Get existing reviews to check for previous AI reviews
-          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" > pr_reviews.json || echo "[]" > pr_reviews.json
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUM/reviews" > pr_reviews.json || echo "[]" > pr_reviews.json
+
+          # For workflow_dispatch, fetch PR metadata since github.event.pull_request is not available
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            gh pr view "$PR_NUM" --json title,body,author,baseRefOid,headRefOid > pr_metadata.json
+          fi
 
           echo "diff_file=pr_diff.txt" >> $GITHUB_OUTPUT
           echo "files_list=changed_files.txt" >> $GITHUB_OUTPUT
@@ -97,17 +131,18 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          # For workflow_dispatch, these are empty and loaded from pr_metadata.json
+          PR_TITLE: ${{ github.event.pull_request.title || '' }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || '' }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           CONFIG_EXISTS: ${{ steps.config.outputs.config_exists }}
-          GITHUB_EVENT_NAME: ${{ github.event.action }}
-          PR_COMMITS: ${{ github.event.pull_request.commits }}
+          GITHUB_EVENT_NAME: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.action }}
+          PR_COMMITS: ${{ github.event.pull_request.commits || 0 }}
           CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         run: |
           node .github/scripts/review-pr.js
@@ -116,14 +151,15 @@ jobs:
         if: always()
         run: |
           mkdir -p .ai-review-cache
-          echo "${{ github.event.pull_request.head.sha }}" >> .ai-review-cache/reviewed-commits.txt
+          echo "${{ steps.pr.outputs.head_sha }}" >> .ai-review-cache/reviewed-commits.txt
 
       - name: Handle review failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
         run: |
-          gh pr comment "${{ github.event.pull_request.number }}" --body "⚠️ **AI Review Failed**
+          gh pr comment "$PR_NUM" --body "⚠️ **AI Review Failed**
 
           The automated code review encountered an error. Please check the workflow logs for details.
 
