@@ -145,6 +145,27 @@ const AI_REVIEW_MARKER = '<!-- ai-pr-review -->';
 // Initialization
 // ============================================================================
 
+// Validate required API keys before initialization
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.error('='.repeat(60));
+  console.error('[FATAL] ANTHROPIC_API_KEY is required');
+  console.error('='.repeat(60));
+  console.error('  Please add ANTHROPIC_API_KEY to your repository secrets.');
+  console.error('  See: https://docs.github.com/en/actions/security-guides/encrypted-secrets');
+  console.error('='.repeat(60));
+  process.exit(1);
+}
+
+if (!process.env.GITHUB_TOKEN) {
+  console.error('='.repeat(60));
+  console.error('[FATAL] GITHUB_TOKEN is required');
+  console.error('='.repeat(60));
+  console.error('  The GITHUB_TOKEN should be automatically provided by GitHub Actions.');
+  console.error('  If missing, check your workflow permissions configuration.');
+  console.error('='.repeat(60));
+  process.exit(1);
+}
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
