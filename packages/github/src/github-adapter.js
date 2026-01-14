@@ -18,7 +18,7 @@ import {
   validateGitSha,
   sanitizeBranchName,
   calculateDiffPosition
-} from '@hernangarcia/ai-pr-review-core';
+} from '@hgarcianareia/ai-pr-review-core';
 
 // Rate limiting configuration
 const RATE_LIMIT = {

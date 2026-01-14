@@ -1,5 +1,5 @@
 {
-  "name": "@hernangarcia/ai-pr-review-github",
+  "name": "@hgarcianareia/ai-pr-review-github",
   "version": "1.0.0",
   "description": "GitHub adapter for AI-powered PR reviews",
   "type": "module",
@@ -20,7 +20,7 @@
     "test": "node --test src/**/*.test.js"
   },
   "dependencies": {
-    "@hernangarcia/ai-pr-review-core": "^1.0.0",
+    "@hgarcianareia/ai-pr-review-core": "^1.0.0",
     "@octokit/rest": "^21.0.2"
   },
   "engines": {
@@ -28,7 +28,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hernangarcia/ai-pr-review-github.git"
+    "url": "git+https://github.com/hgarcianareia/ai-pr-review-github.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -42,6 +42,6 @@
     "claude",
     "anthropic"
   ],
-  "author": "hernangarcia",
+  "author": "hgarcianareia",
   "license": "MIT"
 }

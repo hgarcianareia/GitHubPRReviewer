@@ -1,12 +1,12 @@
 /**
- * @hernangarcia/ai-pr-review-core
+ * @hgarcianareia/ai-pr-review-core
  *
  * Core library for AI-powered PR reviews using Claude.
  * This package is platform-agnostic and provides the review engine,
  * platform adapter interface, and utility functions.
  *
  * Usage:
- *   import { ReviewEngine, PlatformAdapter } from '@hernangarcia/ai-pr-review-core';
+ *   import { ReviewEngine, PlatformAdapter } from '@hgarcianareia/ai-pr-review-core';
  *
  *   // Create your platform adapter (implements PlatformAdapter)
  *   const adapter = new MyPlatformAdapter(context);

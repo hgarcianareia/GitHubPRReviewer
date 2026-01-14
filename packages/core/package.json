@@ -1,5 +1,5 @@
 {
-  "name": "@hernangarcia/ai-pr-review-core",
+  "name": "@hgarcianareia/ai-pr-review-core",
   "version": "1.0.0",
   "description": "Core library for AI-powered PR reviews using Claude",
   "type": "module",
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hernangarcia/ai-pr-review-core.git"
+    "url": "git+https://github.com/hgarcianareia/ai-pr-review-core.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -38,6 +38,6 @@
     "claude",
     "anthropic"
   ],
-  "author": "hernangarcia",
+  "author": "hgarcianareia",
   "license": "MIT"
 }

@@ -6,7 +6,7 @@
  * from GitHub Actions or the command line.
  */
 
-import { ReviewEngine } from '@hernangarcia/ai-pr-review-core';
+import { ReviewEngine } from '@hgarcianareia/ai-pr-review-core';
 import { GitHubAdapter } from './github-adapter.js';
 
 async function main() {
