@@ -95,11 +95,11 @@ function safeValidateEnv(name, validator, defaultValue = undefined) {
 export class BitbucketAdapter extends PlatformAdapter {
   /**
    * @param {Object} context - Platform context
-   * @param {string} token - Bitbucket access token
+   * @param {string} authHeader - Base64 encoded auth header for Basic auth
    */
-  constructor(context, token) {
+  constructor(context, authHeader) {
     super(context);
-    this.token = token;
+    this.authHeader = authHeader;
   }
 
   /**
@@ -107,14 +107,36 @@ export class BitbucketAdapter extends PlatformAdapter {
    * @returns {Promise<BitbucketAdapter>}
    */
   static async create() {
-    // Validate required token
-    const token = process.env.BITBUCKET_TOKEN;
-    if (!token) {
+    // Support both new API token format and legacy App Password format
+    const apiEmail = process.env.BITBUCKET_API_EMAIL;
+    const apiToken = process.env.BITBUCKET_API_TOKEN;
+    const legacyUsername = process.env.BITBUCKET_USERNAME;
+    const legacyToken = process.env.BITBUCKET_TOKEN;
+
+    let authHeader;
+
+    if (apiEmail && apiToken) {
+      // New API token authentication (recommended)
+      authHeader = Buffer.from(`${apiEmail}:${apiToken}`).toString('base64');
+    } else if (legacyUsername && legacyToken) {
+      // Legacy App Password authentication (deprecated)
+      console.log('[WARN] Using deprecated BITBUCKET_USERNAME/BITBUCKET_TOKEN authentication.');
+      console.log('[WARN] Please migrate to BITBUCKET_API_EMAIL/BITBUCKET_API_TOKEN.');
+      console.log('[WARN] See: https://support.atlassian.com/bitbucket-cloud/docs/api-tokens/');
+      authHeader = Buffer.from(`${legacyUsername}:${legacyToken}`).toString('base64');
+    } else {
       console.error('='.repeat(60));
-      console.error('[FATAL] BITBUCKET_TOKEN is required');
+      console.error('[FATAL] Bitbucket authentication is required');
       console.error('='.repeat(60));
-      console.error('  Please add BITBUCKET_TOKEN to your repository variables.');
-      console.error('  This should be an App Password with repository and PR permissions.');
+      console.error('  Please add these repository variables:');
+      console.error('    - BITBUCKET_API_EMAIL: Your Atlassian account email');
+      console.error('    - BITBUCKET_API_TOKEN: API token with scopes');
+      console.error('');
+      console.error('  Create an API token at:');
+      console.error('    Bitbucket > Personal settings > Atlassian account settings >');
+      console.error('    Security > API tokens > Create API token with scopes');
+      console.error('');
+      console.error('  Required scopes: Repositories (Read), Pull requests (Read, Write)');
       console.error('='.repeat(60));
       process.exit(1);
     }
@@ -136,7 +158,7 @@ export class BitbucketAdapter extends PlatformAdapter {
       isManualTrigger: isManualDispatch
     };
 
-    const adapter = new BitbucketAdapter(context, token);
+    const adapter = new BitbucketAdapter(context, authHeader);
 
     // Load PR metadata from API
     await adapter._loadPRMetadata();
@@ -154,7 +176,7 @@ export class BitbucketAdapter extends PlatformAdapter {
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${this.token}`,
+        'Authorization': `Basic ${this.authHeader}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...options.headers

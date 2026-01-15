@@ -4,15 +4,20 @@ Bitbucket Pipelines adapter for AI-powered PR reviews using Anthropic's Claude.
 
 ## Quick Setup
 
-### Step 1: Create App Password
+### Step 1: Create API Token
 
-1. Go to **Personal Settings** > **App passwords** in Bitbucket
-2. Click **Create app password**
-3. Name: `AI PR Review`
-4. Permissions:
+> **Note**: App Passwords are deprecated. Use API tokens with scopes instead.
+
+1. Go to **Bitbucket** > Click your avatar > **Personal settings**
+2. Click **Atlassian account settings**
+3. Go to **Security** tab > **API tokens**
+4. Click **Create API token with scopes**
+5. Name: `AI PR Review`
+6. Select scopes:
    - **Repositories**: Read
    - **Pull requests**: Read and Write
-5. Copy the generated password
+7. Set expiry (max 1 year)
+8. Click **Create** and copy the token
 
 ### Step 2: Add Repository Variables
 
@@ -22,8 +27,8 @@ Bitbucket Pipelines adapter for AI-powered PR reviews using Anthropic's Claude.
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key ([get one here](https://console.anthropic.com)) |
-| `BITBUCKET_USERNAME` | Your Bitbucket username (the one you created the App Password with) |
-| `BITBUCKET_TOKEN` | The App Password you created in Step 1 |
+| `BITBUCKET_API_EMAIL` | Your Atlassian account email (found in Personal settings > Email Aliases) |
+| `BITBUCKET_API_TOKEN` | The API token you created in Step 1 |
 
 ### Step 3: Create Pipeline File
 
@@ -44,21 +49,21 @@ pipelines:
 
             # Fetch PR data
             - |
-              curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
                 > pr_diff.txt
 
-              curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
                 | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
 
-              curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
                 > pr_comments.json
 
             # Check for skip flag
             - |
-              PR_TITLE=$(curl -s -u "${BITBUCKET_USERNAME}:${BITBUCKET_TOKEN}" \
+              PR_TITLE=$(curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}" \
                 | jq -r '.title')
 
@@ -220,8 +225,8 @@ autoFix:
 | `BITBUCKET_REPO_SLUG` | Yes | Built-in | Repository slug (automatic) |
 | `BITBUCKET_PR_ID` | Yes | Built-in | PR number (automatic) |
 | `BITBUCKET_COMMIT` | Yes | Built-in | Commit SHA (automatic) |
-| `BITBUCKET_USERNAME` | Yes | Manual | Your Bitbucket username |
-| `BITBUCKET_TOKEN` | Yes | Manual | App Password |
+| `BITBUCKET_API_EMAIL` | Yes | Manual | Your Atlassian account email |
+| `BITBUCKET_API_TOKEN` | Yes | Manual | API token with scopes |
 | `ANTHROPIC_API_KEY` | Yes | Manual | Anthropic API key |
 
 ## Review States
@@ -289,9 +294,10 @@ if (result.skipped) {
 
 ### Pipeline Fails with Authentication Error
 
-1. Verify `BITBUCKET_USERNAME` is set correctly (your Bitbucket username)
-2. Verify `BITBUCKET_TOKEN` is your App Password (not your account password)
-3. Check App Password has correct permissions (Repositories: Read, Pull requests: Read/Write)
+1. Verify `BITBUCKET_API_EMAIL` is your Atlassian account email (not username)
+2. Verify `BITBUCKET_API_TOKEN` is an API token with scopes (not an App Password)
+3. Check API token has correct scopes (Repositories: Read, Pull requests: Read/Write)
+4. Check API token hasn't expired (max 1 year validity)
 
 ### "ANTHROPIC_API_KEY is required" Error
 
