@@ -241,6 +241,8 @@ The adapter supports Bitbucket's review states:
 | **APPROVE** | No critical issues found |
 | **REQUEST_CHANGES** | Critical issues require attention |
 
+> **Note**: Bitbucket does not allow users to request changes on their own PRs. If the API token belongs to the PR author, the REQUEST_CHANGES state will be silently ignored. For REQUEST_CHANGES to work, use a separate service account or bot account for the API token.
+
 ## Skip Review
 
 Skip AI review for specific PRs:
