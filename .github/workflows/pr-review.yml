@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write         # Use 'write' if enabling auto-fix feature
   pull-requests: write
 
 jobs:
