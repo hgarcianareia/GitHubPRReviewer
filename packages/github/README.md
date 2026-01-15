@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write        # Required for auto-fix feature (use 'read' if auto-fix disabled)
+  contents: read         # Use 'write' if enabling auto-fix feature
   pull-requests: write
 
 jobs:
