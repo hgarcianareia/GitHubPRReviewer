@@ -45,6 +45,9 @@ pipelines:
           caches:
             - npm
           script:
+            # Install jq for JSON parsing
+            - apt-get update && apt-get install -y jq
+
             - npm install @hgarcianareia/ai-pr-review-bitbucket@latest
 
             # Fetch PR data
