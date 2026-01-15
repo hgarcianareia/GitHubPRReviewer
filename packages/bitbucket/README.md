@@ -52,15 +52,15 @@ pipelines:
 
             # Fetch PR data
             - |
-              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
                 > pr_diff.txt
 
-              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
                 | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
 
-              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
                 > pr_comments.json
 

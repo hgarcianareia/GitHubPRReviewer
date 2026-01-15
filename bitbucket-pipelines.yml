@@ -45,17 +45,17 @@ pipelines:
               echo "Fetching PR #${BITBUCKET_PR_ID} data..."
 
               # Get PR diff
-              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
                 > pr_diff.txt
 
               # Get changed files
-              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
                 | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
 
               # Get existing comments
-              curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
                 > pr_comments.json
 
