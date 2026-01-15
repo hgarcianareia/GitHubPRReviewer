@@ -111,6 +111,19 @@ feedbackLoop:
   # Enable feedback tracking
   enabled: true
 
+# Feedback Tracking - persistent history and analytics for review effectiveness
+feedbackTracking:
+  # Enable persistent feedback tracking
+  enabled: true
+  # Auto-commit feedback history and metrics to the repository
+  autoCommit: true
+  # Generate METRICS.md file with analytics
+  generateMetricsFile: true
+  # Path to feedback history JSON file
+  historyPath: '.ai-review/feedback-history.json'
+  # Path to metrics markdown file
+  metricsPath: '.ai-review/METRICS.md'
+
 # Contextual Awareness - read related files for more accurate reviews
 contextualAwareness:
   # Enable contextual awareness

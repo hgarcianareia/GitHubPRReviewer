@@ -8,7 +8,10 @@
     ".": "./src/index.js",
     "./utils": "./src/utils.js",
     "./platform-adapter": "./src/platform-adapter.js",
-    "./review-engine": "./src/review-engine.js"
+    "./review-engine": "./src/review-engine.js",
+    "./feedback-store": "./src/feedback-store.js",
+    "./feedback-analytics": "./src/feedback-analytics.js",
+    "./feedback-reporter": "./src/feedback-reporter.js"
   },
   "files": [
     "src/**/*.js"
@@ -18,7 +21,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "uuid": "^9.0.0"
   },
   "peerDependencies": {},
   "engines": {

@@ -33,6 +33,19 @@ export {
   DEFAULT_CONFIG
 } from './review-engine.js';
 
+// Feedback tracking
+export {
+  FeedbackStore
+} from './feedback-store.js';
+
+export {
+  FeedbackAnalytics
+} from './feedback-analytics.js';
+
+export {
+  FeedbackReporter
+} from './feedback-reporter.js';
+
 // Utility functions
 export {
   // Validation

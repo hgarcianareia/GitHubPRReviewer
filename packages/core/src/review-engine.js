@@ -33,6 +33,9 @@ import {
   chunkDiff
 } from './utils.js';
 
+import { FeedbackStore } from './feedback-store.js';
+import { FeedbackReporter } from './feedback-reporter.js';
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -91,6 +94,13 @@ export const DEFAULT_CONFIG = {
   feedbackLoop: {
     enabled: true
   },
+  feedbackTracking: {
+    enabled: true,
+    autoCommit: true,
+    generateMetricsFile: true,
+    historyPath: '.ai-review/feedback-history.json',
+    metricsPath: '.ai-review/METRICS.md'
+  },
   contextualAwareness: {
     enabled: true,
     maxRelatedFiles: 5,
@@ -138,6 +148,10 @@ export class ReviewEngine {
     this.anthropic = new Anthropic({ apiKey: anthropicApiKey });
     this.config = config;
     this.context = platformAdapter.getContext();
+
+    // Feedback tracking (initialized lazily after config is loaded)
+    this.feedbackStore = null;
+    this.feedbackReporter = null;
 
     // Metrics tracking
     this.metrics = {
@@ -454,6 +468,181 @@ export class ReviewEngine {
       this.log('info', 'Wrote feedback summary');
     } catch (error) {
       this.log('warn', 'Failed to write feedback summary', { error: error.message });
+    }
+  }
+
+  // ============================================================================
+  // Feature: Feedback Tracking (Persistent History)
+  // ============================================================================
+
+  /**
+   * Initializes feedback tracking components
+   * @param {Object} config - Review configuration
+   * @private
+   */
+  async initFeedbackTracking(config) {
+    if (!config.feedbackTracking?.enabled) {
+      return;
+    }
+
+    if (!this.platformAdapter?.getCapabilities().supportsReactions) {
+      this.log('info', 'Platform does not support reactions, skipping feedback tracking');
+      return;
+    }
+
+    try {
+      const historyPath = config.feedbackTracking.historyPath || '.ai-review/feedback-history.json';
+      const metricsPath = config.feedbackTracking.metricsPath || '.ai-review/METRICS.md';
+
+      this.feedbackStore = new FeedbackStore(process.cwd(), historyPath);
+      this.feedbackReporter = new FeedbackReporter(process.cwd(), metricsPath);
+
+      const repository = `${this.context.owner}/${this.context.repo}`;
+      await this.feedbackStore.loadHistory(repository);
+
+      this.log('info', 'Initialized feedback tracking');
+    } catch (error) {
+      this.log('warn', 'Failed to initialize feedback tracking', { error: error.message });
+      this.feedbackStore = null;
+      this.feedbackReporter = null;
+    }
+  }
+
+  /**
+   * Captures feedback event from the current review
+   * @param {Object} reviews - Review results from Claude
+   * @param {Object} previousFeedback - Previous feedback data
+   * @param {Object} config - Review configuration
+   * @returns {Promise<void>}
+   */
+  async captureFeedbackEvent(reviews, previousFeedback, config) {
+    if (!this.feedbackStore || !config.feedbackTracking?.enabled) {
+      return;
+    }
+
+    try {
+      // Calculate severity counts and categories from reviews
+      const severityCounts = { critical: 0, warning: 0, suggestion: 0, nitpick: 0 };
+      const categoryCounts = {
+        security: 0,
+        codeQuality: 0,
+        documentation: 0,
+        testCoverage: 0,
+        conventions: 0
+      };
+      const topComments = [];
+
+      for (const review of reviews) {
+        for (const comment of review.inlineComments || []) {
+          // Count by severity
+          if (severityCounts[comment.severity] !== undefined) {
+            severityCounts[comment.severity]++;
+          }
+
+          // Count by category (review area)
+          const category = comment.category || 'codeQuality';
+          if (categoryCounts[category] !== undefined) {
+            categoryCounts[category]++;
+          }
+        }
+      }
+
+      // Extract top comments with their feedback (from previousFeedback)
+      if (previousFeedback?.byComment && Array.isArray(previousFeedback.byComment)) {
+        for (const commentFeedback of previousFeedback.byComment.slice(0, 10)) {
+          topComments.push({
+            file: commentFeedback.file,
+            line: commentFeedback.line,
+            severity: 'unknown', // We don't have this info from reactions
+            category: 'unknown',
+            comment: '', // Not storing full comment text from reactions
+            positive: commentFeedback.positive,
+            negative: commentFeedback.negative
+          });
+        }
+      }
+
+      // Determine review event type
+      let reviewEvent = 'COMMENT';
+      for (const review of reviews) {
+        if (review.summary?.recommendation === 'REQUEST_CHANGES' || severityCounts.critical > 0) {
+          reviewEvent = 'REQUEST_CHANGES';
+          break;
+        } else if (review.summary?.recommendation === 'APPROVE') {
+          reviewEvent = 'APPROVE';
+        }
+      }
+
+      // Build the feedback event
+      const feedbackEvent = {
+        prNumber: this.context.prNumber,
+        prTitle: this.context.prTitle || `PR #${this.context.prNumber}`,
+        prAuthor: this.context.prAuthor || 'unknown',
+        headSha: this.context.headSha || '',
+        reviewEvent,
+        platform: this.platformAdapter.getPlatformType(),
+        summary: {
+          filesReviewed: this.metrics.filesReviewed,
+          linesReviewed: this.metrics.linesReviewed,
+          commentsPosted: this.metrics.commentsPosted
+        },
+        findings: severityCounts,
+        commentsByCategory: categoryCounts,
+        feedback: previousFeedback ? {
+          positive: previousFeedback.positive,
+          negative: previousFeedback.negative,
+          total: previousFeedback.total
+        } : { positive: 0, negative: 0, total: 0 },
+        topComments
+      };
+
+      await this.feedbackStore.appendFeedback(feedbackEvent);
+      this.log('info', 'Captured feedback event', { prNumber: this.context.prNumber });
+    } catch (error) {
+      this.log('warn', 'Failed to capture feedback event', { error: error.message });
+    }
+  }
+
+  /**
+   * Generates and writes feedback reports
+   * @param {Object} config - Review configuration
+   * @returns {Promise<void>}
+   */
+  async generateFeedbackReports(config) {
+    if (!this.feedbackStore || !this.feedbackReporter || !config.feedbackTracking?.enabled) {
+      return;
+    }
+
+    try {
+      const history = this.feedbackStore.getHistory();
+      if (!history || history.events.length === 0) {
+        this.log('info', 'No feedback history to report');
+        return;
+      }
+
+      // Generate GitHub Actions summary with analytics
+      const actionsSummary = this.feedbackReporter.generateActionsSummary(history.events);
+      await this.platformAdapter.writeMetricsSummary(actionsSummary);
+      this.log('info', 'Wrote feedback analytics to Actions summary');
+
+      // Generate METRICS.md file
+      if (config.feedbackTracking.generateMetricsFile) {
+        await this.feedbackReporter.writeMetricsFile(history.events, history.metadata);
+      }
+
+      // Auto-commit if enabled
+      if (config.feedbackTracking.autoCommit) {
+        const additionalFiles = [];
+        if (config.feedbackTracking.generateMetricsFile) {
+          additionalFiles.push(this.feedbackReporter.getMetricsRelativePath());
+        }
+        await this.feedbackStore.commitToGit(
+          'chore: Update AI review feedback history and metrics',
+          additionalFiles
+        );
+      }
+    } catch (error) {
+      this.log('warn', 'Failed to generate feedback reports', { error: error.message });
     }
   }
 
@@ -1134,6 +1323,9 @@ ${comment.suggestedCode}
         return { skipped: true, reason: 'disabled' };
       }
 
+      // Feature: Initialize feedback tracking
+      await this.initFeedbackTracking(config);
+
       // Feature: Check cache
       if (await this.isCommitAlreadyReviewed(config)) {
         await this.writeMetricsSummary(config);
@@ -1276,6 +1468,10 @@ ${comment.suggestedCode}
 
       // Feature: Feedback Loop
       await this.writeFeedbackSummary(previousFeedback, config);
+
+      // Feature: Feedback Tracking (Persistent)
+      await this.captureFeedbackEvent(filteredReviews, previousFeedback, config);
+      await this.generateFeedbackReports(config);
 
       this.log('info', 'Review completed successfully', {
         inlineComments: inlineComments.length,
