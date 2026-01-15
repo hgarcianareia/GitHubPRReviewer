@@ -4,38 +4,38 @@
 
 ## Summary
 
-- **Total Reviews**: 5
-- **Total Comments**: 36
-- **Average Comments per Review**: 7.2
-- **Overall Approval Rate**: 81.8%
-- **Last Updated**: 2026-01-15T21:05:16.375Z
+- **Total Reviews**: 6
+- **Total Comments**: 41
+- **Average Comments per Review**: 6.8
+- **Overall Approval Rate**: 68.8%
+- **Last Updated**: 2026-01-15T21:07:10.315Z
 
 ## Recent Performance
 
 ### Last 7 Days
-- Reviews: 6
-- Approval Rate: 81.8%
-- Total Reactions: 11
+- Reviews: 8
+- Approval Rate: 68.8%
+- Total Reactions: 16
 
 ### Last 30 Days
-- Approval Rate: 81.8%
-- Total Reactions: 11
+- Approval Rate: 68.8%
+- Total Reactions: 16
 
 ## Issues by Severity
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 10 | N/A |
-| 🟡 warning | 15 | N/A |
-| 🔵 suggestion | 10 | N/A |
+| 🔴 critical | 11 | N/A |
+| 🟡 warning | 17 | N/A |
+| 🔵 suggestion | 12 | N/A |
 | ⚪ nitpick | 1 | N/A |
 
 ## Issues by Category
 
 | Category | Count | Feedback |
 |----------|-------|----------|
+| documentation | 6 | - |
 | security | 5 | - |
-| documentation | 5 | - |
 | codeQuality | 0 | - |
 | testCoverage | 0 | - |
 | conventions | 0 | - |
@@ -44,7 +44,7 @@
 
 | Week | Reviews | 👍 | 👎 | Approval |
 |------|---------|----|----|----------|
-| 2026-W03 | 5 | 9 | 2 | 81.8% |
+| 2026-W03 | 6 | 11 | 5 | 68.8% |
 
 ---
 
