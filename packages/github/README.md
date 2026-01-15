@@ -26,28 +26,114 @@ on:
       pr_number:
         description: 'PR number to review'
         required: true
+        type: number
+
+concurrency:
+  group: pr-review-${{ github.event.inputs.pr_number || github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
-  review:
+  ai-review:
+    name: Claude Code Review
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (!contains(github.event.pull_request.labels.*.name, 'skip-ai-review') &&
+      !startsWith(github.event.pull_request.title, '[no-review]'))
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: AI Review
+      - name: Install AI Review package
+        run: npm install @hgarcianareia/ai-pr-review-github@latest
+
+      - name: Set PR number
+        id: pr
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUM="${{ github.event.inputs.pr_number }}"
+            HEAD_SHA=$(gh pr view "$PR_NUM" --json headRefOid -q '.headRefOid')
+            echo "number=$PR_NUM" >> $GITHUB_OUTPUT
+            echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Restore review cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .ai-review-cache
+          key: ai-review-${{ steps.pr.outputs.number }}-${{ steps.pr.outputs.head_sha }}
+          restore-keys: |
+            ai-review-${{ steps.pr.outputs.number }}-
+
+      - name: Get PR diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          gh pr diff "$PR_NUM" > pr_diff.txt
+          gh pr view "$PR_NUM" --json files -q '.files[].path' > changed_files.txt
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUM/comments" > pr_comments.json || echo "[]" > pr_comments.json
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUM/reviews" > pr_reviews.json || echo "[]" > pr_reviews.json
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            gh pr view "$PR_NUM" --json title,body,author,baseRefOid,headRefOid > pr_metadata.json
+          fi
+
+      - name: Run AI Review
+        env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_TITLE: ${{ github.event.pull_request.title || '' }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || '' }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          AI_REVIEW_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.action }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         run: npx ai-pr-review-github
+
+      - name: Save review cache
+        if: always()
+        run: |
+          mkdir -p .ai-review-cache
+          echo "${{ steps.pr.outputs.head_sha }}" >> .ai-review-cache/reviewed-commits.txt
+
+      - name: Handle review failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          gh pr comment "$PR_NUM" --body "⚠️ **AI Review Failed**
+
+          The automated code review encountered an error. Please check the workflow logs for details.
+
+          You can:
+          - Re-run the workflow from the Actions tab
+          - Add the \`skip-ai-review\` label to skip automated review
+          - Prefix your PR title with \`[no-review]\` to skip review"
 ```
 
 ### Step 3: Create Your First PR
