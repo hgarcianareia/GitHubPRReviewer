@@ -1,204 +1,57 @@
-# Arquitectura del Proyecto - AI PR Review
+# AI PR Review - Notas del Proyecto
 
-## Estructura del Monorepo
+## ¿Qué es?
 
-```
-GitHubPRReviewer/
-├── packages/
-│   ├── core/                    # Lógica compartida
-│   │   └── src/
-│   │       ├── index.js         # Exports públicos
-│   │       ├── review-engine.js # Motor principal de revisión
-│   │       ├── platform-adapter.js # Clase base abstracta
-│   │       └── utils.js         # Utilidades (parseDiff, validaciones, etc.)
-│   │
-│   ├── github/                  # Adaptador para GitHub
-│   │   └── src/
-│   │       ├── index.js         # Export de GitHubAdapter
-│   │       ├── cli.js           # Entry point: npx ai-pr-review-github
-│   │       └── github-adapter.js # Implementación para GitHub API
-│   │
-│   └── bitbucket/               # Adaptador para Bitbucket
-│       └── src/
-│           ├── index.js         # Export de BitbucketAdapter
-│           ├── cli.js           # Entry point: npx ai-pr-review-bitbucket
-│           └── bitbucket-adapter.js # Implementación para Bitbucket API
-│
-├── .github/
-│   └── workflows/
-│       └── pr-review.yml        # Workflow de ejemplo para GitHub Actions
-│
-├── bitbucket-pipelines.yml      # Pipeline de ejemplo para Bitbucket
-├── package.json                 # Monorepo root (npm workspaces)
-└── README.md
-```
+Un bot que revisa automáticamente los Pull Requests usando Claude (la IA de Anthropic). Cuando alguien abre un PR, el bot analiza los cambios y deja comentarios sobre posibles bugs, problemas de seguridad, código duplicado, etc.
 
-## Paquetes npm Publicados
+## ¿Cómo funciona?
 
-| Paquete | Descripción |
-|---------|-------------|
-| `@hgarcianareia/ai-pr-review-core` | Motor de revisión + utilidades |
-| `@hgarcianareia/ai-pr-review-github` | Adaptador GitHub + CLI |
-| `@hgarcianareia/ai-pr-review-bitbucket` | Adaptador Bitbucket + CLI |
+1. Alguien abre un PR en GitHub o Bitbucket
+2. Se dispara automáticamente un pipeline (GitHub Actions o Bitbucket Pipelines)
+3. El pipeline ejecuta nuestro paquete npm
+4. El paquete obtiene el diff del PR y se lo envía a Claude
+5. Claude analiza el código y devuelve sus comentarios
+6. El bot publica los comentarios en el PR
 
-## Flujo de Ejecución
+## Estructura del proyecto
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CI/CD Pipeline                                │
-│  (GitHub Actions o Bitbucket Pipelines)                         │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      CLI (cli.js)                                │
-│  - Valida ANTHROPIC_API_KEY                                     │
-│  - Crea el adaptador de plataforma                              │
-│  - Instancia ReviewEngine                                        │
-│  - Ejecuta engine.run()                                          │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 ReviewEngine (core)                              │
-│  - Carga configuración (.github/ai-review.yml)                  │
-│  - Obtiene diff y archivos cambiados via adaptador              │
-│  - Filtra archivos ignorados                                     │
-│  - Envía diff a Claude API                                       │
-│  - Parsea respuesta JSON de Claude                               │
-│  - Formatea comentarios y summary                                │
-│  - Llama a adaptador.postReview()                               │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              PlatformAdapter (GitHub o Bitbucket)                │
-│  - getDiff()           → Obtiene el diff del PR                 │
-│  - getChangedFiles()   → Lista de archivos modificados          │
-│  - getExistingComments() → Comentarios previos (evitar duplicados)│
-│  - postReview()        → Publica summary + inline comments      │
-│  - APPROVE / REQUEST_CHANGES                                     │
-└─────────────────────────────────────────────────────────────────┘
-```
+Es un **monorepo** con 3 paquetes npm:
 
-## Comunicación entre Componentes
+| Paquete | ¿Qué hace? |
+|---------|------------|
+| `core` | La lógica principal: hablar con Claude, parsear el diff, formatear comentarios |
+| `github` | Sabe cómo hablar con la API de GitHub |
+| `bitbucket` | Sabe cómo hablar con la API de Bitbucket |
 
-### 1. CLI → ReviewEngine
-```javascript
-// cli.js
-const adapter = await GitHubAdapter.create();  // o BitbucketAdapter
-const engine = new ReviewEngine({
-  platformAdapter: adapter,
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY
-});
-await engine.run();
-```
+La idea es que `core` tiene todo lo compartido, y los adaptadores (`github`, `bitbucket`) solo manejan las diferencias de cada plataforma.
 
-### 2. ReviewEngine → PlatformAdapter
-El ReviewEngine llama métodos del adaptador:
-- `adapter.getDiff()` - Obtiene el diff
-- `adapter.getChangedFiles()` - Lista de archivos
-- `adapter.getFileContent(path)` - Contenido de archivos relacionados
-- `adapter.postReview(summary, comments, event)` - Publica la revisión
+## ¿Cómo se usa?
 
-### 3. ReviewEngine → Claude API
-```javascript
-// Envía prompt con el diff
-const response = await anthropic.messages.create({
-  model: config.model,
-  messages: [{ role: 'user', content: prompt }],
-  max_tokens: config.maxTokens
-});
-// Parsea JSON de la respuesta
-const review = JSON.parse(response.content[0].text);
-```
+El usuario final solo necesita:
 
-## Diferencias GitHub vs Bitbucket
+1. Copiar un archivo de workflow/pipeline a su repo
+2. Configurar sus secrets (API key de Anthropic + credenciales de la plataforma)
+3. Listo, cada PR se revisa automáticamente
 
-### Variables de Entorno
-
-| Variable | GitHub | Bitbucket |
-|----------|--------|-----------|
-| Workspace/Owner | `GITHUB_REPOSITORY_OWNER` | `BITBUCKET_WORKSPACE` |
-| Repo | `GITHUB_REPOSITORY` | `BITBUCKET_REPO_SLUG` |
-| PR Number | `GITHUB_EVENT_PATH` (JSON) | `BITBUCKET_PR_ID` |
-| Commit SHA | `GITHUB_SHA` | `BITBUCKET_COMMIT` |
-| Token | `GITHUB_TOKEN` (automático) | `BITBUCKET_API_TOKEN` (manual) |
-| Email | No requerido | `BITBUCKET_API_EMAIL` (manual) |
-
-### Autenticación API
+## Diferencias entre GitHub y Bitbucket
 
 | Aspecto | GitHub | Bitbucket |
 |---------|--------|-----------|
-| Tipo | Bearer token | Basic auth (email:token) |
-| Token | `GITHUB_TOKEN` automático | API token manual con scopes |
-| Header | `Authorization: Bearer <token>` | `Authorization: Basic <base64>` |
+| Pipeline | GitHub Actions | Bitbucket Pipelines |
+| Autenticación | Token automático (`GITHUB_TOKEN`) | Token manual (hay que crear un API token) |
+| Config file | `.github/ai-review.yml` | `.bitbucket/ai-review.yml` |
 
-### API de Comentarios
+## Limitación importante de Bitbucket
 
-| Aspecto | GitHub | Bitbucket |
-|---------|--------|-----------|
-| Posición | `position` (diff position) | `line` (número de línea) |
-| Review States | APPROVE, REQUEST_CHANGES, COMMENT | APPROVE, REQUEST_CHANGES |
-| Reacciones | Soportadas (👍👎) | No soportadas |
-| Skip Label | `skip-ai-review` label | Solo via título |
+Bitbucket no te deja "solicitar cambios" en tus propios PRs. Si el token es tuyo y el PR es tuyo, el bot puede comentar pero no puede marcar el PR como "necesita cambios". Para eso necesitarías una cuenta de servicio separada.
 
-### Endpoints API
+## ¿Dónde están publicados los paquetes?
 
-**GitHub:**
-```
-POST /repos/{owner}/{repo}/pulls/{pr}/reviews
-POST /repos/{owner}/{repo}/pulls/{pr}/comments
-```
+En npmjs.com, son públicos:
+- `@hgarcianareia/ai-pr-review-core`
+- `@hgarcianareia/ai-pr-review-github`
+- `@hgarcianareia/ai-pr-review-bitbucket`
 
-**Bitbucket:**
-```
-POST /repositories/{workspace}/{repo}/pullrequests/{pr}/comments
-POST /repositories/{workspace}/{repo}/pullrequests/{pr}/approve
-POST /repositories/{workspace}/{repo}/pullrequests/{pr}/request-changes
-```
+## Costos
 
-### Obtención del Diff
-
-**GitHub:**
-- El workflow hace checkout del código
-- Se usa `git diff` localmente
-- O se obtiene via API con header `Accept: application/vnd.github.v3.diff`
-
-**Bitbucket:**
-- El pipeline obtiene el diff via API con curl
-- Requiere `-L` flag para seguir redirects (302)
-- Se guarda en `pr_diff.txt` antes de ejecutar el CLI
-
-## Configuración
-
-Archivo de configuración por plataforma:
-- GitHub: `.github/ai-review.yml`
-- Bitbucket: `.bitbucket/ai-review.yml`
-
-Ambos usan el mismo esquema de configuración (parseado por `core`).
-
-## Limitaciones Conocidas
-
-### Bitbucket
-1. **REQUEST_CHANGES en PRs propios**: Bitbucket no permite solicitar cambios en PRs creados por el mismo usuario del token. Usar cuenta de servicio.
-2. **Redirects**: Los endpoints `/diff` y `/diffstat` retornan 302. Usar `curl -L`.
-3. **jq requerido**: La imagen `node:20` no incluye `jq`. Instalar con `apt-get`.
-
-### GitHub
-1. **Rate limits**: Más estrictos que Bitbucket. El código incluye retry con backoff exponencial.
-2. **Diff position**: Calcular la posición en el diff es complejo (no es número de línea).
-
-## Publicación de Paquetes
-
-```bash
-# Desde el root del monorepo
-npm run publish:all   # Publica los 3 paquetes
-
-# Individual
-npm run publish:core
-npm run publish:github
-npm run publish:bitbucket
-```
-
-Los paquetes se publican a npmjs.com (público).
+El costo es principalmente el uso de la API de Claude. Un PR chico cuesta ~$0.01-0.03, uno mediano ~$0.05-0.15.
