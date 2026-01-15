@@ -77,7 +77,7 @@ prSizeWarning:
 # Review Caching - skip re-review if same commit was already reviewed
 caching:
   # Enable review caching
-  enabled: true
+  enabled: false
 
 # Custom Review Instructions - parse <!-- ai-review: instructions --> from PR description
 customInstructions:
