@@ -92,6 +92,32 @@ pipelines:
             - pr_diff.txt
             - changed_files.txt
             - pr_comments.json
+
+  # Optional: Manual trigger for existing PRs
+  custom:
+    manual-review:
+      - variables:
+          - name: PR_NUMBER
+            description: "PR number to review"
+      - step:
+          name: Manual AI PR Review
+          caches:
+            - npm
+          script:
+            - apt-get update && apt-get install -y jq
+            - npm install @hgarcianareia/ai-pr-review-bitbucket@latest
+            - export BITBUCKET_PR_ID=$PR_NUMBER
+            - |
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
+                > pr_diff.txt
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
+                | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
+                > pr_comments.json
+            - npx ai-pr-review-bitbucket
 ```
 
 ### Step 4: Create Your First PR
@@ -99,6 +125,18 @@ pipelines:
 The pipeline automatically runs when you:
 - Open a new Pull Request
 - Push commits to an existing PR
+
+### Manual Trigger
+
+To manually run a review on an existing PR:
+
+1. Go to **Pipelines** > **Run pipeline**
+2. Select the branch (e.g., `main`)
+3. Select pipeline: **custom: manual-review**
+4. Enter the PR number
+5. Click **Run**
+
+> **Note**: The manual pipeline requires the `custom: manual-review` section in your `bitbucket-pipelines.yml`. See the full pipeline file in Step 3.
 
 ## Configuration
 

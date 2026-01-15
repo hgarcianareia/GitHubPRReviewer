@@ -77,3 +77,49 @@ pipelines:
             - pr_diff.txt
             - changed_files.txt
             - pr_comments.json
+
+  custom:
+    manual-review:
+      - variables:
+          - name: PR_NUMBER
+            description: "PR number to review"
+      - step:
+          name: Manual AI PR Review
+          caches:
+            - npm
+          script:
+            # Install jq for JSON parsing
+            - apt-get update && apt-get install -y jq
+
+            # Install the AI review package
+            - npm install @hgarcianareia/ai-pr-review-bitbucket@latest
+
+            # Set PR ID from variable
+            - export BITBUCKET_PR_ID=$PR_NUMBER
+
+            # Fetch PR data using Bitbucket API
+            - |
+              echo "Fetching PR #${BITBUCKET_PR_ID} data..."
+
+              # Get PR diff
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
+                > pr_diff.txt
+
+              # Get changed files
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
+                | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
+
+              # Get existing comments
+              curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
+                "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
+                > pr_comments.json
+
+            # Run the AI review
+            - npx ai-pr-review-bitbucket
+
+          artifacts:
+            - pr_diff.txt
+            - changed_files.txt
+            - pr_comments.json
