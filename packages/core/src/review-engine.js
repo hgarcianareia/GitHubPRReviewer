@@ -366,6 +366,32 @@ export class ReviewEngine {
   // Feature: Review Feedback Loop
   // ============================================================================
 
+  /**
+   * Extracts severity from a comment body based on emoji indicators
+   * @param {string} body - Comment body text
+   * @returns {string} Severity level (critical, warning, suggestion, nitpick, or unknown)
+   * @private
+   */
+  _extractSeverityFromComment(body) {
+    if (!body) return 'unknown';
+
+    // Check for severity emojis at the start of the comment
+    if (body.includes('🔴') || body.toLowerCase().includes('critical')) {
+      return 'critical';
+    }
+    if (body.includes('🟡') || body.toLowerCase().includes('warning')) {
+      return 'warning';
+    }
+    if (body.includes('🔵') || body.toLowerCase().includes('suggestion')) {
+      return 'suggestion';
+    }
+    if (body.includes('⚪') || body.toLowerCase().includes('nitpick')) {
+      return 'nitpick';
+    }
+
+    return 'unknown';
+  }
+
   async getReviewFeedback(config) {
     if (!config.feedbackLoop?.enabled) {
       return null;
@@ -396,12 +422,17 @@ export class ReviewEngine {
             feedback.total += reactions.positive + reactions.negative;
 
             if (reactions.positive > 0 || reactions.negative > 0) {
+              // Extract severity from comment body based on emoji
+              const severity = this._extractSeverityFromComment(comment.body);
+
               feedback.byComment.push({
                 id: comment.id,
                 file: comment.path,
                 line: comment.line,
                 positive: reactions.positive,
-                negative: reactions.negative
+                negative: reactions.negative,
+                severity,
+                body: comment.body
               });
             }
           }
@@ -553,9 +584,9 @@ export class ReviewEngine {
           topComments.push({
             file: commentFeedback.file,
             line: commentFeedback.line,
-            severity: 'unknown', // We don't have this info from reactions
+            severity: commentFeedback.severity || 'unknown',
             category: 'unknown',
-            comment: '', // Not storing full comment text from reactions
+            comment: commentFeedback.body || '',
             positive: commentFeedback.positive,
             negative: commentFeedback.negative
           });
