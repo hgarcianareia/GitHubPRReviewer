@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write         # Use 'write' if enabling auto-fix feature
+  contents: write         # Required for auto-fix PRs and feedback tracking (auto-commit metrics)
   pull-requests: write
 
 jobs:

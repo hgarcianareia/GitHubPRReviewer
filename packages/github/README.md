@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read         # Use 'write' if enabling auto-fix feature
+  contents: write        # Required for auto-fix PRs and feedback tracking
   pull-requests: write
 
 jobs:
@@ -249,6 +249,31 @@ ignorePatterns:
 | `metrics.showInSummary` | `true` | Show in Actions Summary |
 | `metrics.showInComment` | `true` | Show in PR comment |
 
+### Feedback Tracking
+
+Track review effectiveness over time with persistent analytics.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `feedbackTracking.enabled` | `true` | Enable persistent feedback tracking |
+| `feedbackTracking.autoCommit` | `true` | Auto-commit feedback history to repo |
+| `feedbackTracking.generateMetricsFile` | `true` | Generate `.ai-review/METRICS.md` |
+| `feedbackTracking.historyPath` | `.ai-review/feedback-history.json` | Path to history file |
+| `feedbackTracking.metricsPath` | `.ai-review/METRICS.md` | Path to metrics file |
+
+When enabled, this feature:
+- Stores feedback history in `.ai-review/feedback-history.json`
+- Generates a `METRICS.md` file with analytics (approval rates, trends, etc.)
+- Shows analytics in GitHub Actions Summary
+- Auto-commits changes after each review
+
+> **Important**: Feedback tracking requires `contents: write` permission to commit the history file:
+> ```yaml
+> permissions:
+>   contents: write       # Required for feedback tracking (auto-commit)
+>   pull-requests: write
+> ```
+
 ### Full Configuration Example
 
 ```yaml
@@ -305,6 +330,11 @@ metrics:
   enabled: true
   showInSummary: true
   showInComment: true
+
+feedbackTracking:
+  enabled: true
+  autoCommit: true
+  generateMetricsFile: true
 ```
 
 ## Environment Variables
@@ -383,7 +413,7 @@ if (result.skipped) {
 ### "AI Review Failed" Comment
 
 1. Check `ANTHROPIC_API_KEY` is set correctly in repository secrets
-2. Verify workflow has `contents: read` and `pull-requests: write` permissions
+2. Verify workflow has `contents: write` and `pull-requests: write` permissions
 3. Check Actions logs for detailed error messages
 
 ### No Comments Appearing
@@ -412,6 +442,21 @@ If `autoFix.enabled: true` but no PR is created:
 2. **Check suggested fixes count**: Look for `Suggested Fixes | N` in the metrics. If `0`, Claude didn't provide any fixable code suggestions (only single-line fixes with high confidence are included).
 
 3. **Check logs**: Look for `[ERROR] Failed to create auto-fix PR:` in the workflow logs for the specific error.
+
+### Feedback History Not Saving
+
+If feedback tracking is enabled but `.ai-review/feedback-history.json` is not being created:
+
+1. **Check permissions**: Workflow needs `contents: write` permission to commit files
+   ```yaml
+   permissions:
+     contents: write       # Required for feedback tracking
+     pull-requests: write
+   ```
+
+2. **Check logs**: Look for `[WARN] Failed to commit feedback history:` in the workflow logs.
+
+3. **Disable auto-commit**: If you don't want auto-commits, set `feedbackTracking.autoCommit: false`. The analytics will still show in the GitHub Actions Summary.
 
 ## License
 
