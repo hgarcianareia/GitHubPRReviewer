@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "repository": "hgarcianareia/GitHubPRReviewer",
+  "events": [
+    {
+      "id": "77746def-0f5b-46fd-9bad-6c249759f397",
+      "timestamp": "2026-01-15T20:41:45.071Z",
+      "prNumber": 1,
+      "prTitle": "Add sample code for testing AI review",
+      "prAuthor": "hgarcianareia",
+      "headSha": "d30108aaf6e464d7f62d8d1f5b024f5fca53304b",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 1,
+        "linesReviewed": 44,
+        "commentsPosted": 16
+      },
+      "findings": {
+        "critical": 6,
+        "warning": 7,
+        "suggestion": 3,
+        "nitpick": 0
+      },
+      "commentsByCategory": {
+        "security": 5,
+        "codeQuality": 0,
+        "documentation": 1,
+        "testCoverage": 0,
+        "conventions": 0
+      },
+      "feedback": {
+        "positive": 0,
+        "negative": 0,
+        "total": 0
+      },
+      "topComments": []
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "2026-01-15T20:41:45.072Z",
+    "totalReviews": 1,
+    "overallApprovalRate": 0
+  }
+}
