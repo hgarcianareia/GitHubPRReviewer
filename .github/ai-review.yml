@@ -127,7 +127,7 @@ contextualAwareness:
 # Auto-fix PRs - automatically create separate PRs with suggested fixes
 autoFix:
   # Enable auto-fix (disabled by default for safety)
-  enabled: false
+  enabled: true
   # Create fixes in a separate PR instead of committing to the same branch
   createSeparatePR: true
   # Require manual approval before creating the fix PR
