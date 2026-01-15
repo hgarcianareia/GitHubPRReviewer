@@ -300,20 +300,69 @@ export class GitHubAdapter extends PlatformAdapter {
         safeEvent = 'COMMENT';
       }
 
-      await withRetry(
-        () => this.octokit.pulls.createReview({
-          owner: this.context.owner,
-          repo: this.context.repo,
-          pull_number: this.context.prNumber,
-          commit_id: this.context.headSha,
-          body: markedBody,
-          event: safeEvent,
-          comments: comments
-        }),
-        'postReviewComment'
-      );
+      // Batch comments to avoid GitHub API 502 errors (max ~10 comments per request)
+      const MAX_COMMENTS_PER_BATCH = 10;
 
-      console.log(`[INFO] Posted review with ${comments.length} inline comments (event: ${safeEvent})`);
+      if (comments.length <= MAX_COMMENTS_PER_BATCH) {
+        // Small number of comments - post all at once
+        await withRetry(
+          () => this.octokit.pulls.createReview({
+            owner: this.context.owner,
+            repo: this.context.repo,
+            pull_number: this.context.prNumber,
+            commit_id: this.context.headSha,
+            body: markedBody,
+            event: safeEvent,
+            comments: comments
+          }),
+          'postReviewComment'
+        );
+        console.log(`[INFO] Posted review with ${comments.length} inline comments (event: ${safeEvent})`);
+      } else {
+        // Large number of comments - batch them
+        console.log(`[INFO] Batching ${comments.length} comments into chunks of ${MAX_COMMENTS_PER_BATCH}`);
+
+        // First, post the summary review with the first batch of comments
+        const firstBatch = comments.slice(0, MAX_COMMENTS_PER_BATCH);
+        await withRetry(
+          () => this.octokit.pulls.createReview({
+            owner: this.context.owner,
+            repo: this.context.repo,
+            pull_number: this.context.prNumber,
+            commit_id: this.context.headSha,
+            body: markedBody,
+            event: safeEvent,
+            comments: firstBatch
+          }),
+          'postReviewComment'
+        );
+        console.log(`[INFO] Posted review with first ${firstBatch.length} inline comments (event: ${safeEvent})`);
+
+        // Post remaining comments in batches as separate COMMENT reviews
+        for (let i = MAX_COMMENTS_PER_BATCH; i < comments.length; i += MAX_COMMENTS_PER_BATCH) {
+          const batch = comments.slice(i, i + MAX_COMMENTS_PER_BATCH);
+          const batchNum = Math.floor(i / MAX_COMMENTS_PER_BATCH) + 1;
+
+          await withRetry(
+            () => this.octokit.pulls.createReview({
+              owner: this.context.owner,
+              repo: this.context.repo,
+              pull_number: this.context.prNumber,
+              commit_id: this.context.headSha,
+              body: `${AI_REVIEW_MARKER}\n*Additional review comments (batch ${batchNum + 1})*`,
+              event: 'COMMENT',
+              comments: batch
+            }),
+            `postReviewCommentBatch${batchNum + 1}`
+          );
+          console.log(`[INFO] Posted batch ${batchNum + 1} with ${batch.length} inline comments`);
+
+          // Small delay between batches to avoid rate limiting
+          await sleep(1000);
+        }
+
+        console.log(`[INFO] Completed posting all ${comments.length} comments in ${Math.ceil(comments.length / MAX_COMMENTS_PER_BATCH)} batches`);
+      }
     } catch (error) {
       console.error('[ERROR] Failed to post review:', error.message);
       throw error;
@@ -391,15 +440,67 @@ export class GitHubAdapter extends PlatformAdapter {
     const sanitizedBranch = sanitizeBranchName(branchName);
 
     try {
-      // Stash any current changes
-      execSync('git stash', {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: GIT_TIMEOUT.local
-      });
+      // Log working directory for debugging
+      console.log(`[INFO] Auto-fix working directory: ${process.cwd()}`);
 
-      // Create and checkout new branch
-      execSync(`git checkout -b ${sanitizedBranch}`, {
+      // Configure git identity for commits
+      try {
+        execSync('git config user.email "ai-review-bot@users.noreply.github.com"', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+        execSync('git config user.name "AI Review Bot"', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+        console.log('[INFO] Configured git identity for auto-fix commits');
+      } catch (e) {
+        console.log('[WARN] Could not configure git identity:', e.message);
+      }
+
+      // Check if we're in a git repo and on the right branch
+      try {
+        const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        }).trim();
+        console.log(`[INFO] Current git branch: ${currentBranch}`);
+      } catch (e) {
+        console.log('[WARN] Could not determine current branch');
+      }
+
+      // Stash any current changes (ignore errors if nothing to stash)
+      try {
+        execSync('git stash', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+      } catch (e) {
+        console.log('[INFO] Nothing to stash');
+      }
+
+      // Get the PR's head branch to base our fixes on
+      const prInfo = await this.getPRInfo(this.context.prNumber);
+      const prHeadBranch = prInfo.head.ref;
+      console.log(`[INFO] PR head branch: ${prHeadBranch}`);
+
+      // Fetch the PR branch if we don't have it
+      try {
+        execSync(`git fetch origin ${prHeadBranch}`, {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.network
+        });
+      } catch (e) {
+        console.log(`[WARN] Could not fetch ${prHeadBranch}: ${e.message}`);
+      }
+
+      // Create new branch from PR head
+      execSync(`git checkout -b ${sanitizedBranch} origin/${prHeadBranch}`, {
         encoding: 'utf-8',
         stdio: 'pipe',
         timeout: GIT_TIMEOUT.local
@@ -414,34 +515,85 @@ export class GitHubAdapter extends PlatformAdapter {
         fixesByFile.get(fix.file).push(fix);
       }
 
-      // Apply fixes to each file
+      // Apply fixes to each file and track which files were modified
+      let appliedCount = 0;
+      const modifiedFiles = [];
+
       for (const [filePath, fileFixes] of fixesByFile) {
         try {
           const fullPath = path.join(process.cwd(), filePath);
+
+          // Check if file exists
+          try {
+            await fs.access(fullPath);
+          } catch (e) {
+            console.log(`[WARN] File not found, skipping: ${filePath}`);
+            continue;
+          }
+
           const content = await fs.readFile(fullPath, 'utf-8');
           const lines = content.split('\n');
 
           // Sort fixes by line number descending to apply from bottom up
           const sortedFixes = [...fileFixes].sort((a, b) => b.line - a.line);
 
+          let fileModified = false;
           for (const fix of sortedFixes) {
             if (fix.line > 0 && fix.line <= lines.length) {
               lines[fix.line - 1] = fix.suggested;
+              appliedCount++;
+              fileModified = true;
             }
           }
 
-          await fs.writeFile(fullPath, lines.join('\n'), 'utf-8');
+          if (fileModified) {
+            await fs.writeFile(fullPath, lines.join('\n'), 'utf-8');
+            modifiedFiles.push(filePath);
+            console.log(`[INFO] Applied ${fileFixes.length} fixes to ${filePath}`);
+          }
         } catch (error) {
           console.log(`[WARN] Failed to apply fixes to ${filePath}:`, error.message);
         }
       }
 
-      // Commit changes
-      execSync('git add -A', {
+      // Check if we actually applied any fixes
+      if (appliedCount === 0 || modifiedFiles.length === 0) {
+        console.log('[WARN] No fixes were applied, skipping auto-fix PR creation');
+        execSync('git checkout -', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+        return null;
+      }
+
+      // Only add the specific files that were modified (not all files)
+      for (const filePath of modifiedFiles) {
+        execSync(`git add "${filePath}"`, {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+      }
+      console.log(`[INFO] Staged ${modifiedFiles.length} modified files for commit`);
+
+      // Check if there are actually changes to commit
+      const status = execSync('git status --porcelain', {
         encoding: 'utf-8',
         stdio: 'pipe',
         timeout: GIT_TIMEOUT.local
-      });
+      }).trim();
+
+      if (!status) {
+        console.log('[WARN] No changes to commit after applying fixes');
+        execSync('git checkout -', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+        return null;
+      }
+
       execSync(`git commit -m "${prTitle}"`, {
         encoding: 'utf-8',
         stdio: 'pipe',
@@ -455,31 +607,36 @@ export class GitHubAdapter extends PlatformAdapter {
         timeout: GIT_TIMEOUT.network
       });
 
-      // Get the base branch
-      const prInfo = await this.getPRInfo(this.context.prNumber);
-      const baseBranch = prInfo.head.ref;
-
-      // Create PR
+      // Create PR targeting the PR's head branch (so it merges into the PR)
       const newPR = await this.octokit.pulls.create({
         owner: this.context.owner,
         repo: this.context.repo,
         title: prTitle,
         body: prBody,
         head: sanitizedBranch,
-        base: baseBranch
+        base: prHeadBranch
       });
 
       // Checkout back to original branch
-      execSync('git checkout -', {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: GIT_TIMEOUT.local
-      });
-      execSync('git stash pop || true', {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: GIT_TIMEOUT.local
-      });
+      try {
+        execSync('git checkout -', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+      } catch (e) {
+        // Ignore if we can't switch back
+      }
+
+      try {
+        execSync('git stash pop || true', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT.local
+        });
+      } catch (e) {
+        // Ignore if nothing to pop
+      }
 
       console.log(`[INFO] Created auto-fix PR #${newPR.data.number}`);
 
@@ -487,7 +644,7 @@ export class GitHubAdapter extends PlatformAdapter {
         prNumber: newPR.data.number,
         prUrl: newPR.data.html_url,
         branch: sanitizedBranch,
-        fixCount: fixes.length
+        fixCount: appliedCount
       };
     } catch (error) {
       console.error('[ERROR] Failed to create auto-fix PR:', error.message);

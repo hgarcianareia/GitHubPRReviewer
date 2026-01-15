@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write        # Required for auto-fix feature (use 'read' if auto-fix disabled)
   pull-requests: write
 
 jobs:
@@ -222,6 +222,13 @@ ignorePatterns:
 | `autoFix.createSeparatePR` | `true` | Create fixes in separate PR |
 | `autoFix.branchPrefix` | `ai-fix/` | Branch prefix for fixes |
 
+> **Important**: Auto-fix requires `contents: write` permission to push branches. Update your workflow permissions:
+> ```yaml
+> permissions:
+>   contents: write       # Required for auto-fix (git push)
+>   pull-requests: write
+> ```
+
 ### Custom Instructions
 
 | Option | Default | Description |
@@ -390,6 +397,21 @@ if (result.skipped) {
 This can happen when:
 - File was modified between review runs
 - Line is not part of the diff (only changed lines can have comments)
+
+### Auto-fix PR Not Created
+
+If `autoFix.enabled: true` but no PR is created:
+
+1. **Check permissions**: Workflow needs `contents: write` permission to push branches
+   ```yaml
+   permissions:
+     contents: write       # Required for auto-fix
+     pull-requests: write
+   ```
+
+2. **Check suggested fixes count**: Look for `Suggested Fixes | N` in the metrics. If `0`, Claude didn't provide any fixable code suggestions (only single-line fixes with high confidence are included).
+
+3. **Check logs**: Look for `[ERROR] Failed to create auto-fix PR:` in the workflow logs for the specific error.
 
 ## License
 
