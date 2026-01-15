@@ -37,6 +37,10 @@ Create `bitbucket-pipelines.yml` in your repository root:
 ```yaml
 image: node:20
 
+definitions:
+  caches:
+    npm: ~/.npm
+
 pipelines:
   pull-requests:
     '**':
@@ -48,34 +52,40 @@ pipelines:
             # Install jq for JSON parsing
             - apt-get update && apt-get install -y jq
 
+            # Install the AI review package
             - npm install @hgarcianareia/ai-pr-review-bitbucket@latest
 
-            # Fetch PR data
+            # Fetch PR data using Bitbucket API
             - |
+              echo "Fetching PR #${BITBUCKET_PR_ID} data..."
+
+              # Get PR diff
               curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diff" \
                 > pr_diff.txt
 
+              # Get changed files
               curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/diffstat" \
                 | jq -r '.values[].new.path // .values[].old.path' > changed_files.txt
 
+              # Get existing comments
               curl -sL -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}/comments" \
                 > pr_comments.json
 
-            # Check for skip flag
+            # Check for skip flag in PR title
             - |
               PR_TITLE=$(curl -s -u "${BITBUCKET_API_EMAIL}:${BITBUCKET_API_TOKEN}" \
                 "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests/${BITBUCKET_PR_ID}" \
                 | jq -r '.title')
 
               if echo "$PR_TITLE" | grep -qi "skip-ai-review"; then
-                echo "Skipping AI review"
+                echo "Skipping AI review (skip-ai-review found in PR title)"
                 exit 0
               fi
 
-            # Run review
+            # Run the AI review
             - npx ai-pr-review-bitbucket
 
           artifacts:
