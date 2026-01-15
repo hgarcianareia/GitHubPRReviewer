@@ -45,3 +45,6 @@ ehthumbs.db
 dist/
 build/
 out/
+
+# Project notes (personal)
+ARCHITECTURE.md
