@@ -578,11 +578,100 @@
           "negative": 0
         }
       ]
+    },
+    {
+      "id": "1a3c40e6-38fc-480b-9bd8-ad28d1b7cc1f",
+      "timestamp": "2026-01-16T15:53:40.490Z",
+      "prNumber": 18,
+      "prTitle": "Test/ai review demo",
+      "prAuthor": "hgarcianareia",
+      "headSha": "bbe2e08278956bf571b8aca1f511d14daff65bf3",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 1,
+        "linesReviewed": 7,
+        "commentsPosted": 5
+      },
+      "findings": {
+        "critical": 1,
+        "warning": 2,
+        "suggestion": 2,
+        "nitpick": 1
+      },
+      "commentsByCategory": {
+        "security": 0,
+        "codeQuality": 3,
+        "documentation": 1,
+        "testCoverage": 1,
+        "conventions": 1
+      },
+      "feedback": {
+        "positive": 7,
+        "negative": 7,
+        "total": 14
+      },
+      "topComments": [
+        {
+          "file": "test-sample.ts",
+          "line": 3,
+          "severity": "warning",
+          "category": "documentation",
+          "comment": "Missing JSDoc documentation. Add documentation describing the function's purpose, parameters, return value, and any constraints (e.g., valid discount ranges).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 4,
+          "severity": "critical",
+          "category": "codeQuality",
+          "comment": "The TODO for input validation should be implemented, not left as a comment. Without validation, this function will accept negative prices, discount percentages over 100%, or NaN values, leading to incorrect results. Add validation to ensure: 1) price >= 0, 2) discountPercent is between 0 and 100, 3) both values are valid numbers.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 5,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Consider using a more precise calculation to avoid potential floating-point precision issues. For financial calculations, you might want to round to 2 decimal places or use a decimal library for precise arithmetic.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 6,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "For financial calculations, consider rounding the final result to 2 decimal places to avoid floating-point precision issues (e.g., 19.999999999999998 instead of 20).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 1,
+          "severity": "warning",
+          "category": "testCoverage",
+          "comment": "No unit tests are included for this new function. Add comprehensive tests covering: normal cases (various price and discount combinations), edge cases (0% discount, 100% discount, 0 price), and error cases (negative values, invalid percentages, NaN inputs).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 3,
+          "severity": "nitpick",
+          "category": "conventions",
+          "comment": "Consider adding a blank line before the function declaration for better readability, especially since there's already a blank line at the top of the file.",
+          "positive": 0,
+          "negative": 0
+        }
+      ]
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T14:57:48.167Z",
-    "totalReviews": 14,
-    "overallApprovalRate": 65.6
+    "lastUpdated": "2026-01-16T15:53:40.490Z",
+    "totalReviews": 15,
+    "overallApprovalRate": 62.7
   }
 }
