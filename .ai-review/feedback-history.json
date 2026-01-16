@@ -288,9 +288,9 @@
         "conventions": 0
       },
       "feedback": {
-        "positive": 0,
-        "negative": 0,
-        "total": 0
+        "positive": 4,
+        "negative": 2,
+        "total": 6
       },
       "topComments": [
         {
@@ -356,12 +356,13 @@
           "positive": 0,
           "negative": 0
         }
-      ]
+      ],
+      "closedAt": "2026-01-16T18:17:28.235Z"
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T18:12:15.157Z",
+    "lastUpdated": "2026-01-16T18:17:28.236Z",
     "totalReviews": 4,
-    "overallApprovalRate": 45
+    "overallApprovalRate": 50
   }
 }
