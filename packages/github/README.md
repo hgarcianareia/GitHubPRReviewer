@@ -20,7 +20,7 @@ name: AI PR Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]  # 'closed' captures final feedback
   workflow_dispatch:
     inputs:
       pr_number:
@@ -251,7 +251,7 @@ ignorePatterns:
 
 ### Feedback Tracking
 
-Track review effectiveness over time with persistent analytics.
+Track review effectiveness over time with persistent analytics. Developers can provide feedback on AI review comments, and the system tracks this to improve metrics over time.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -266,6 +266,34 @@ When enabled, this feature:
 - Generates a `METRICS.md` file with analytics (approval rates, trends, etc.)
 - Shows analytics in GitHub Actions Summary
 - Auto-commits changes after each review
+- Captures final reactions when PR is closed/merged
+
+#### Providing Feedback
+
+Developers can provide feedback on AI review comments by reacting with:
+- 👍 (thumbs up) - The comment was helpful/accurate
+- 👎 (thumbs down) - The comment was not helpful/inaccurate
+
+Each review summary includes a reminder:
+> *💡 React with 👍 or 👎 on inline comments to help improve future reviews.*
+
+#### Feedback Capture on PR Close
+
+The workflow automatically captures feedback reactions when a PR is closed or merged. This ensures that reactions added after the initial review are not lost.
+
+**How it works:**
+1. PR is reviewed → comments posted with 0 reactions
+2. Developer reacts to comments with 👍/👎
+3. PR is merged/closed → workflow triggers in "feedback-only" mode
+4. Final reactions are captured and saved to history
+5. Metrics are updated with the new feedback data
+
+This requires the `closed` trigger in your workflow:
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+```
 
 #### Auto-commit Behavior
 
