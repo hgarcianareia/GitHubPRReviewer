@@ -259,11 +259,109 @@
           "negative": 0
         }
       ]
+    },
+    {
+      "id": "07b5a3b4-d6f0-4f4d-9e9c-d4b3fea63387",
+      "timestamp": "2026-01-16T18:12:15.157Z",
+      "prNumber": 20,
+      "prTitle": "Test: Feedback capture demo",
+      "prAuthor": "hgarcianareia",
+      "headSha": "fc7bef8ee28e993e6824c4a3df2b8e92c12da3b1",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 1,
+        "linesReviewed": 15,
+        "commentsPosted": 6
+      },
+      "findings": {
+        "critical": 1,
+        "warning": 2,
+        "suggestion": 3,
+        "nitpick": 1
+      },
+      "commentsByCategory": {
+        "security": 1,
+        "codeQuality": 4,
+        "documentation": 2,
+        "testCoverage": 0,
+        "conventions": 0
+      },
+      "feedback": {
+        "positive": 0,
+        "negative": 0,
+        "total": 0
+      },
+      "topComments": [
+        {
+          "file": "test-feedback.ts",
+          "line": 11,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Critical SQL Injection Vulnerability: Direct string interpolation of userId into SQL query allows attackers to execute arbitrary SQL commands. An attacker could pass userId as \"1' OR '1'='1\" to bypass authentication or \"1'; DROP TABLE users; --\" to delete data. Use parameterized queries or an ORM instead.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-feedback.ts",
+          "line": 3,
+          "severity": "warning",
+          "category": "codeQuality",
+          "comment": "Missing input validation: The function should validate that price is non-negative and discountPercent is between 0-100. Negative prices or percentages over 100 could lead to incorrect calculations or unexpected behavior.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-feedback.ts",
+          "line": 9,
+          "severity": "warning",
+          "category": "codeQuality",
+          "comment": "Missing return type annotation: The function should explicitly declare its return type for better type safety and code documentation.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-feedback.ts",
+          "line": 4,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "TODO comment should be addressed: Input validation is essential for this function. Consider adding checks for: price >= 0, discountPercent >= 0 && discountPercent <= 100, and throwing appropriate errors for invalid inputs.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-feedback.ts",
+          "line": 3,
+          "severity": "suggestion",
+          "category": "documentation",
+          "comment": "Missing JSDoc documentation: Add documentation describing the function's purpose, parameters, return value, and any exceptions it might throw. Example: /** Calculates the final price after applying a discount percentage. @param price - The original price (must be non-negative) @param discountPercent - The discount percentage to apply (0-100) @returns The discounted price @throws {Error} If inputs are invalid */",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-feedback.ts",
+          "line": 9,
+          "severity": "suggestion",
+          "category": "documentation",
+          "comment": "Missing JSDoc documentation: Add documentation explaining this function's purpose, parameters, and return value. Also document the security requirements for the userId parameter.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-feedback.ts",
+          "line": 5,
+          "severity": "nitpick",
+          "category": "codeQuality",
+          "comment": "Consider using a more descriptive variable name: 'discountAmount' would be clearer than 'discount' to distinguish it from the percentage parameter.",
+          "positive": 0,
+          "negative": 0
+        }
+      ]
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T16:30:59.159Z",
-    "totalReviews": 3,
+    "lastUpdated": "2026-01-16T18:12:15.157Z",
+    "totalReviews": 4,
     "overallApprovalRate": 45
   }
 }

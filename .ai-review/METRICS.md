@@ -4,11 +4,11 @@
 
 ## Summary
 
-- **Total Reviews**: 3
-- **Total Comments**: 17
-- **Average Comments per Review**: 5.7
+- **Total Reviews**: 4
+- **Total Comments**: 24
+- **Average Comments per Review**: 6
 - **Overall Approval Rate**: 45%
-- **Last Updated**: 2026-01-16T16:30:59.162Z
+- **Last Updated**: 2026-01-16T18:12:15.161Z
 
 ## Recent Performance
 
@@ -25,32 +25,33 @@
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 3 | 33.3% |
-| 🟡 warning | 6 | 42.9% |
-| 🔵 suggestion | 7 | 44.4% |
-| ⚪ nitpick | 1 | 0% |
+| 🔴 critical | 4 | 33.3% |
+| 🟡 warning | 8 | 42.9% |
+| 🔵 suggestion | 10 | 44.4% |
+| ⚪ nitpick | 2 | 0% |
 
 ## Issues by Category
 
 | Category | Count | Feedback |
 |----------|-------|----------|
-| codeQuality | 8 | 👍 5 / 👎 6 |
-| documentation | 3 | 👍 1 / 👎 2 |
+| codeQuality | 12 | 👍 5 / 👎 6 |
+| documentation | 5 | 👍 1 / 👎 2 |
 | testCoverage | 3 | 👍 1 / 👎 2 |
 | conventions | 3 | 👍 1 / 👎 2 |
-| security | 0 | - |
+| security | 1 | - |
 
 ## Weekly Trends
 
 | Week | Reviews | 👍 | 👎 | Approval |
 |------|---------|----|----|----------|
-| 2026-W03 | 3 | 9 | 11 | 45% |
+| 2026-W03 | 4 | 9 | 11 | 45% |
 
 ## Most Commented Files
 
 | File | Comments |
 |------|----------|
 | `test-sample.ts` | 17 |
+| `test-feedback.ts` | 7 |
 
 ---
 
