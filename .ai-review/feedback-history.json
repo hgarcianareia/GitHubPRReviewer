@@ -409,11 +409,91 @@
         "total": 6
       },
       "topComments": []
+    },
+    {
+      "id": "53f709bd-d301-417d-a15d-69b34baab3b2",
+      "timestamp": "2026-01-16T14:49:07.382Z",
+      "prNumber": 18,
+      "prTitle": "Test/ai review demo",
+      "prAuthor": "hgarcianareia",
+      "headSha": "bbe2e08278956bf571b8aca1f511d14daff65bf3",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 1,
+        "linesReviewed": 7,
+        "commentsPosted": 4
+      },
+      "findings": {
+        "critical": 1,
+        "warning": 2,
+        "suggestion": 1,
+        "nitpick": 1
+      },
+      "commentsByCategory": {
+        "security": 0,
+        "codeQuality": 0,
+        "documentation": 1,
+        "testCoverage": 0,
+        "conventions": 0
+      },
+      "feedback": {
+        "positive": 4,
+        "negative": 2,
+        "total": 6
+      },
+      "topComments": [
+        {
+          "file": "test-sample.ts",
+          "line": 3,
+          "severity": "warning",
+          "category": "documentation",
+          "comment": "Missing JSDoc documentation. Add documentation to explain the function's purpose, parameters, return value, and any constraints (e.g., valid discount range).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 4,
+          "severity": "critical",
+          "category": "quality",
+          "comment": "Input validation is missing (as noted in TODO). This function should validate that: 1) price is non-negative, 2) discountPercent is between 0 and 100. Without validation, negative prices or discount percentages over 100% could produce incorrect results.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 5,
+          "severity": "suggestion",
+          "category": "quality",
+          "comment": "Consider rounding the result to 2 decimal places to avoid floating-point precision issues common in financial calculations. Alternatively, consider using a decimal library for precise monetary calculations.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 7,
+          "severity": "warning",
+          "category": "testing",
+          "comment": "No unit tests are included for this function. Add tests covering: normal cases, edge cases (0% discount, 100% discount), boundary values, and error cases (negative values, invalid percentages).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 1,
+          "severity": "nitpick",
+          "category": "convention",
+          "comment": "Remove the empty line at the beginning of the file to follow common TypeScript conventions.",
+          "positive": 0,
+          "negative": 0
+        }
+      ]
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T14:41:32.137Z",
-    "totalReviews": 12,
-    "overallApprovalRate": 65.3
+    "lastUpdated": "2026-01-16T14:49:07.383Z",
+    "totalReviews": 13,
+    "overallApprovalRate": 65.5
   }
 }
