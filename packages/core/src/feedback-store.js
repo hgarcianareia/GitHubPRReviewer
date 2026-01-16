@@ -252,7 +252,42 @@ export class FeedbackStore {
   }
 
   /**
-   * Commits feedback history to git
+   * Detects the default branch (main or master)
+   * @param {Object} gitExecOptions - Git exec options
+   * @returns {string|null} The default branch name or null if not found
+   * @private
+   */
+  _detectDefaultBranch(gitExecOptions) {
+    // Try to get from remote HEAD
+    try {
+      const remoteHead = execSync('git symbolic-ref refs/remotes/origin/HEAD', gitExecOptions).trim();
+      const branch = remoteHead.replace('refs/remotes/origin/', '');
+      if (branch) return branch;
+    } catch (e) {
+      // Fallback: check if main or master exists
+    }
+
+    // Check if main exists
+    try {
+      execSync('git rev-parse --verify origin/main', gitExecOptions);
+      return 'main';
+    } catch (e) {
+      // main doesn't exist
+    }
+
+    // Check if master exists
+    try {
+      execSync('git rev-parse --verify origin/master', gitExecOptions);
+      return 'master';
+    } catch (e) {
+      // master doesn't exist
+    }
+
+    return null;
+  }
+
+  /**
+   * Commits feedback history to git (always to main or master branch)
    * @param {string} message - Commit message
    * @param {string[]} additionalFiles - Additional files to add to the commit
    * @returns {Promise<boolean>} - True if commit succeeded
@@ -272,6 +307,23 @@ export class FeedbackStore {
         execSync('git config user.name "AI Review Bot"', gitExecOptions);
       } catch (e) {
         console.log('[WARN] Could not configure git identity:', e.message);
+      }
+
+      // Detect and checkout the default branch (main or master)
+      const defaultBranch = this._detectDefaultBranch(gitExecOptions);
+      if (!defaultBranch) {
+        console.log('[WARN] Could not detect default branch (main/master)');
+        return false;
+      }
+
+      // Fetch latest and checkout default branch
+      try {
+        execSync('git fetch origin', gitExecOptions);
+        execSync(`git checkout ${defaultBranch}`, gitExecOptions);
+        execSync(`git pull origin ${defaultBranch}`, gitExecOptions);
+      } catch (e) {
+        console.log(`[WARN] Could not checkout ${defaultBranch}:`, e.message);
+        return false;
       }
 
       // Add the feedback history file
@@ -299,13 +351,13 @@ export class FeedbackStore {
       const sanitizedMessage = this._sanitizeForShell(message);
       execSync(`git commit -m "${sanitizedMessage}"`, gitExecOptions);
 
-      // Push with extended timeout
-      execSync('git push', {
+      // Push to default branch with extended timeout
+      execSync(`git push origin ${defaultBranch}`, {
         ...gitExecOptions,
         timeout: GIT_TIMEOUT * 2
       });
 
-      console.log('[INFO] Committed and pushed feedback history');
+      console.log(`[INFO] Committed and pushed feedback history to ${defaultBranch}`);
       return true;
     } catch (error) {
       console.log('[WARN] Failed to commit feedback history:', error.message);
