@@ -581,7 +581,18 @@ export class ReviewEngine {
           }
 
           // Count by category (review area)
-          const category = comment.category || 'codeQuality';
+          // Normalize category names (handle variations from Claude)
+          const categoryMap = {
+            'quality': 'codeQuality',
+            'code-quality': 'codeQuality',
+            'testing': 'testCoverage',
+            'test': 'testCoverage',
+            'tests': 'testCoverage',
+            'convention': 'conventions',
+            'style': 'conventions'
+          };
+          const rawCategory = comment.category || 'codeQuality';
+          const category = categoryMap[rawCategory] || rawCategory;
           if (categoryCounts[category] !== undefined) {
             categoryCounts[category]++;
           }
@@ -961,7 +972,7 @@ You MUST respond with valid JSON in this exact format:
       "file": "path/to/file.ts",
       "line": 42,
       "severity": "critical | warning | suggestion | nitpick",
-      "category": "security | quality | documentation | testing | convention",
+      "category": "security | codeQuality | documentation | testCoverage | conventions",
       "comment": "The specific issue and how to fix it",
       "suggestedCode": "optional - the exact replacement code for this line"
     }

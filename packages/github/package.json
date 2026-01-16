@@ -1,6 +1,6 @@
 {
   "name": "@hgarcianareia/ai-pr-review-github",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "GitHub adapter for AI-powered PR reviews",
   "type": "module",
   "main": "src/index.js",
@@ -19,7 +19,7 @@
     "test": "echo 'No tests configured yet'"
   },
   "dependencies": {
-    "@hgarcianareia/ai-pr-review-core": "^1.1.3",
+    "@hgarcianareia/ai-pr-review-core": "^1.1.4",
     "@octokit/rest": "^21.0.2"
   },
   "engines": {
