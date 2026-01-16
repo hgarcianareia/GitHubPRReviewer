@@ -109,7 +109,12 @@ export class FeedbackAnalytics {
       const hasDetailedComments = event.topComments && event.topComments.length > 0 &&
         event.topComments.some(c => c.severity && c.severity !== 'unknown');
 
-      if (hasDetailedComments) {
+      // Check if topComments have actual per-comment feedback
+      const totalCommentFeedback = hasDetailedComments
+        ? event.topComments.reduce((sum, c) => sum + (c.positive || 0) + (c.negative || 0), 0)
+        : 0;
+
+      if (hasDetailedComments && totalCommentFeedback > 0) {
         // Use detailed per-comment feedback
         for (const comment of event.topComments) {
           const severity = comment.severity?.toLowerCase() || 'suggestion';
@@ -118,8 +123,26 @@ export class FeedbackAnalytics {
             result[severity].negative += comment.negative || 0;
           }
         }
+      } else if (hasDetailedComments && event.feedback && (event.feedback.positive > 0 || event.feedback.negative > 0)) {
+        // topComments have severity but no per-comment feedback
+        // Distribute event-level feedback based on topComments' severities
+        const severityCounts = { critical: 0, warning: 0, suggestion: 0, nitpick: 0 };
+        for (const comment of event.topComments) {
+          const severity = comment.severity?.toLowerCase() || 'suggestion';
+          if (severityCounts[severity] !== undefined) {
+            severityCounts[severity]++;
+          }
+        }
+        const totalComments = event.topComments.length;
+        if (totalComments > 0) {
+          for (const severity of Object.keys(severityCounts)) {
+            const ratio = severityCounts[severity] / totalComments;
+            result[severity].positive += Math.round((event.feedback.positive || 0) * ratio);
+            result[severity].negative += Math.round((event.feedback.negative || 0) * ratio);
+          }
+        }
       } else if (event.feedback && event.findings) {
-        // Fallback: distribute total feedback proportionally across severities
+        // Fallback: distribute total feedback proportionally across severities using findings
         const totalFindings =
           (event.findings.critical || 0) +
           (event.findings.warning || 0) +
@@ -176,7 +199,12 @@ export class FeedbackAnalytics {
       const hasDetailedComments = event.topComments && event.topComments.length > 0 &&
         event.topComments.some(c => c.category && c.category !== 'unknown');
 
-      if (hasDetailedComments) {
+      // Check if topComments have actual per-comment feedback
+      const totalCommentFeedback = hasDetailedComments
+        ? event.topComments.reduce((sum, c) => sum + (c.positive || 0) + (c.negative || 0), 0)
+        : 0;
+
+      if (hasDetailedComments && totalCommentFeedback > 0) {
         // Use detailed per-comment feedback
         for (const comment of event.topComments) {
           const category = comment.category || 'codeQuality';
@@ -185,8 +213,26 @@ export class FeedbackAnalytics {
             categories[category].negative += comment.negative || 0;
           }
         }
+      } else if (hasDetailedComments && event.feedback && (event.feedback.positive > 0 || event.feedback.negative > 0)) {
+        // topComments have category but no per-comment feedback
+        // Distribute event-level feedback based on topComments' categories
+        const categoryCounts = {};
+        for (const comment of event.topComments) {
+          const category = comment.category || 'codeQuality';
+          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+        }
+        const totalComments = event.topComments.length;
+        if (totalComments > 0) {
+          for (const [category, count] of Object.entries(categoryCounts)) {
+            if (categories[category]) {
+              const ratio = count / totalComments;
+              categories[category].positive += Math.round((event.feedback.positive || 0) * ratio);
+              categories[category].negative += Math.round((event.feedback.negative || 0) * ratio);
+            }
+          }
+        }
       } else if (event.feedback && event.commentsByCategory) {
-        // Fallback: distribute total feedback proportionally across categories
+        // Fallback: distribute total feedback proportionally across categories using commentsByCategory
         const totalComments = Object.values(event.commentsByCategory).reduce((a, b) => a + b, 0);
 
         if (totalComments > 0 && (event.feedback.positive > 0 || event.feedback.negative > 0)) {

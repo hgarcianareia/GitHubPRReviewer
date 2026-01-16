@@ -52,7 +52,7 @@ jobs:
           node-version: '20'
 
       - name: Install AI Review package
-        run: npm install @hgarcianareia/ai-pr-review-github@1.0.8
+        run: npm install @hgarcianareia/ai-pr-review-github@1.0.9
 
       - name: Check for config file
         id: config
