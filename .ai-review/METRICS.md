@@ -1,40 +1,40 @@
 # AI PR Review Metrics
 
-> Auto-generated on 2026-01-15
+> Auto-generated on 2026-01-16
 
 ## Summary
 
-- **Total Reviews**: 8
-- **Total Comments**: 51
-- **Average Comments per Review**: 6.4
-- **Overall Approval Rate**: 64.5%
-- **Last Updated**: 2026-01-15T21:14:36.177Z
+- **Total Reviews**: 9
+- **Total Comments**: 56
+- **Average Comments per Review**: 6.2
+- **Overall Approval Rate**: 64.7%
+- **Last Updated**: 2026-01-16T14:23:31.917Z
 
 ## Recent Performance
 
 ### Last 7 Days
-- Reviews: 16
-- Approval Rate: 64.5%
-- Total Reactions: 31
+- Reviews: 17
+- Approval Rate: 64.7%
+- Total Reactions: 34
 
 ### Last 30 Days
-- Approval Rate: 64.5%
-- Total Reactions: 31
+- Approval Rate: 64.7%
+- Total Reactions: 34
 
 ## Issues by Severity
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 13 | N/A |
-| 🟡 warning | 21 | N/A |
-| 🔵 suggestion | 16 | N/A |
+| 🔴 critical | 14 | N/A |
+| 🟡 warning | 23 | N/A |
+| 🔵 suggestion | 18 | N/A |
 | ⚪ nitpick | 1 | N/A |
 
 ## Issues by Category
 
 | Category | Count | Feedback |
 |----------|-------|----------|
-| documentation | 8 | - |
+| documentation | 9 | - |
 | security | 5 | - |
 | codeQuality | 0 | - |
 | testCoverage | 0 | - |
@@ -44,7 +44,7 @@
 
 | Week | Reviews | 👍 | 👎 | Approval |
 |------|---------|----|----|----------|
-| 2026-W03 | 8 | 20 | 11 | 64.5% |
+| 2026-W03 | 9 | 22 | 12 | 64.7% |
 
 ---
 
