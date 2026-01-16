@@ -4,53 +4,53 @@
 
 ## Summary
 
-- **Total Reviews**: 2
-- **Total Comments**: 12
-- **Average Comments per Review**: 6
-- **Overall Approval Rate**: 50%
-- **Last Updated**: 2026-01-16T16:09:27.809Z
+- **Total Reviews**: 3
+- **Total Comments**: 17
+- **Average Comments per Review**: 5.7
+- **Overall Approval Rate**: 45%
+- **Last Updated**: 2026-01-16T16:30:59.162Z
 
 ## Recent Performance
 
 ### Last 7 Days
-- Reviews: 7
-- Approval Rate: 50%
-- Total Reactions: 14
+- Reviews: 10
+- Approval Rate: 45%
+- Total Reactions: 20
 
 ### Last 30 Days
-- Approval Rate: 50%
-- Total Reactions: 14
+- Approval Rate: 45%
+- Total Reactions: 20
 
 ## Issues by Severity
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 2 | N/A |
-| 🟡 warning | 4 | N/A |
-| 🔵 suggestion | 6 | N/A |
-| ⚪ nitpick | 0 | N/A |
+| 🔴 critical | 3 | 33.3% |
+| 🟡 warning | 6 | 42.9% |
+| 🔵 suggestion | 7 | 44.4% |
+| ⚪ nitpick | 1 | 0% |
 
 ## Issues by Category
 
 | Category | Count | Feedback |
 |----------|-------|----------|
-| codeQuality | 6 | - |
-| documentation | 2 | - |
-| testCoverage | 2 | - |
-| conventions | 2 | - |
+| codeQuality | 8 | 👍 5 / 👎 6 |
+| documentation | 3 | 👍 1 / 👎 2 |
+| testCoverage | 3 | 👍 1 / 👎 2 |
+| conventions | 3 | 👍 1 / 👎 2 |
 | security | 0 | - |
 
 ## Weekly Trends
 
 | Week | Reviews | 👍 | 👎 | Approval |
 |------|---------|----|----|----------|
-| 2026-W03 | 2 | 7 | 7 | 50% |
+| 2026-W03 | 3 | 9 | 11 | 45% |
 
 ## Most Commented Files
 
 | File | Comments |
 |------|----------|
-| `test-sample.ts` | 12 |
+| `test-sample.ts` | 17 |
 
 ---
 
