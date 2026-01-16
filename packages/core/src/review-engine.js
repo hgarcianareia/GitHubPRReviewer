@@ -698,6 +698,94 @@ export class ReviewEngine {
     }
   }
 
+  /**
+   * Runs in feedback-only mode when PR is closed/merged
+   * Captures final reactions without running a new review
+   * @param {Object} config - Review configuration
+   * @returns {Promise<Object>} Result object
+   */
+  async runFeedbackOnlyMode(config) {
+    this.log('info', 'PR closed/merged - capturing final feedback only');
+
+    try {
+      if (!config.feedbackTracking?.enabled) {
+        this.log('info', 'Feedback tracking disabled, nothing to capture');
+        return { skipped: true, reason: 'feedback_tracking_disabled' };
+      }
+
+      // Get reactions from existing AI comments
+      const previousFeedback = await this.getReviewFeedback(config);
+
+      if (!previousFeedback || previousFeedback.total === 0) {
+        this.log('info', 'No feedback reactions found on PR comments');
+        return { skipped: true, reason: 'no_feedback' };
+      }
+
+      this.log('info', `Captured final feedback: +${previousFeedback.positive}/-${previousFeedback.negative}`);
+
+      // Find the most recent event for this PR to update it
+      if (this.feedbackStore) {
+        const history = this.feedbackStore.getHistory();
+        const existingEvent = history?.events?.find(
+          e => e.prNumber === this.context.prNumber && e.headSha === this.context.headSha
+        );
+
+        if (existingEvent) {
+          // Update existing event with final feedback
+          existingEvent.feedback = {
+            positive: previousFeedback.positive,
+            negative: previousFeedback.negative,
+            total: previousFeedback.total
+          };
+
+          // Update topComments with per-comment feedback if available
+          if (previousFeedback.byComment && existingEvent.topComments) {
+            const feedbackByKey = new Map();
+            for (const fb of previousFeedback.byComment) {
+              feedbackByKey.set(`${fb.file}:${fb.line}`, fb);
+            }
+
+            for (const comment of existingEvent.topComments) {
+              const key = `${comment.file}:${comment.line}`;
+              const fb = feedbackByKey.get(key);
+              if (fb) {
+                comment.positive = fb.positive;
+                comment.negative = fb.negative;
+              }
+            }
+          }
+
+          existingEvent.closedAt = new Date().toISOString();
+          await this.feedbackStore.saveHistory();
+          this.log('info', 'Updated existing feedback event with final reactions');
+        } else {
+          this.log('info', 'No existing event found for this PR/commit, skipping update');
+        }
+      }
+
+      // Generate updated reports
+      await this.generateFeedbackReports(config);
+
+      // Write summary to Actions
+      await this.platformAdapter.writeMetricsSummary(
+        `## Feedback Captured on PR Close\n\n` +
+        `| Metric | Value |\n|--------|-------|\n` +
+        `| 👍 Positive | ${previousFeedback.positive} |\n` +
+        `| 👎 Negative | ${previousFeedback.negative} |\n` +
+        `| Total Reactions | ${previousFeedback.total} |\n`
+      );
+
+      return {
+        skipped: false,
+        feedbackOnly: true,
+        feedback: previousFeedback
+      };
+    } catch (error) {
+      this.log('error', 'Failed to capture final feedback', { error: error.message });
+      return { skipped: true, reason: 'error', error: error.message };
+    }
+  }
+
   // ============================================================================
   // Feature: Contextual Awareness
   // ============================================================================
@@ -1377,6 +1465,11 @@ ${comment.suggestedCode}
 
       // Feature: Initialize feedback tracking
       await this.initFeedbackTracking(config);
+
+      // Feature: Capture final feedback on PR close/merge
+      if (this.context.eventName === 'closed') {
+        return await this.runFeedbackOnlyMode(config);
+      }
 
       // Feature: Check cache
       if (await this.isCommitAlreadyReviewed(config)) {

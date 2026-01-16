@@ -10,7 +10,7 @@ name: AI PR Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -52,7 +52,7 @@ jobs:
           node-version: '20'
 
       - name: Install AI Review package
-        run: npm install @hgarcianareia/ai-pr-review-github@1.0.9
+        run: npm install @hgarcianareia/ai-pr-review-github@1.0.10
 
       - name: Check for config file
         id: config
