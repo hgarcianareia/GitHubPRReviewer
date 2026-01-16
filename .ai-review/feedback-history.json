@@ -358,11 +358,181 @@
         }
       ],
       "closedAt": "2026-01-16T18:17:28.235Z"
+    },
+    {
+      "id": "884668a9-b512-49aa-a21e-7bd9e0ea41fe",
+      "timestamp": "2026-01-16T20:30:49.865Z",
+      "prNumber": 21,
+      "prTitle": "Add Claude Code GitHub Workflow",
+      "prAuthor": "hgarcianareia",
+      "headSha": "c925230d4e7b794640b67c19837e043cad8a6409",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 2,
+        "linesReviewed": 94,
+        "commentsPosted": 14
+      },
+      "findings": {
+        "critical": 1,
+        "warning": 5,
+        "suggestion": 8,
+        "nitpick": 1
+      },
+      "commentsByCategory": {
+        "security": 3,
+        "codeQuality": 9,
+        "documentation": 1,
+        "testCoverage": 0,
+        "conventions": 2
+      },
+      "feedback": {
+        "positive": 0,
+        "negative": 0,
+        "total": 0
+      },
+      "topComments": [
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 31,
+          "severity": "warning",
+          "category": "codeQuality",
+          "comment": "fetch-depth: 1 may be insufficient for code review. Claude might need more context from git history to understand changes properly. Consider using fetch-depth: 0 or at least fetch-depth: 10 to provide better context for reviews.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 38,
+          "severity": "critical",
+          "category": "security",
+          "comment": "The ANTHROPIC_API_KEY secret must exist before this workflow can function. Add a validation step or document in the PR that this secret needs to be configured. Without it, the workflow will fail silently or expose errors in logs.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 40,
+          "severity": "warning",
+          "category": "security",
+          "comment": "The code-review plugin will have access to read all files in the repository. Consider adding path restrictions or file type filters to limit what Claude can access, especially if there are sensitive configuration files or credentials in the repo.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 2,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Consider adding a concurrency group to prevent multiple simultaneous reviews on the same PR, which could waste API credits and create confusion. This is especially important for PRs with frequent updates.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 15,
+          "severity": "warning",
+          "category": "security",
+          "comment": "The conditional logic allows ANY user to trigger Claude by mentioning @claude. This could lead to API abuse or excessive costs. Consider restricting to repository collaborators or adding rate limiting. You could add: `github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'OWNER'`",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 30,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Same as the code review workflow - fetch-depth: 1 may limit Claude's ability to understand context. Consider increasing this value.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 40,
+          "severity": "suggestion",
+          "category": "documentation",
+          "comment": "The additional_permissions setting is documented but the format seems unusual (YAML multiline string for what appears to be a single permission). Verify this is the correct format according to the claude-code-action documentation.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 2,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Add a concurrency group to prevent multiple Claude instances from running simultaneously on the same issue/PR, which could cause conflicts and waste API credits.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 1,
+          "severity": "warning",
+          "category": "codeQuality",
+          "comment": "Missing timeout-minutes setting. AI operations can sometimes hang or take unexpectedly long. Add a reasonable timeout (e.g., 10-15 minutes) to prevent runaway jobs that consume GitHub Actions minutes.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 19,
+          "severity": "warning",
+          "category": "codeQuality",
+          "comment": "Missing timeout-minutes setting for the job. This is especially important for AI operations that might hang or take unexpectedly long.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 6,
+          "severity": "suggestion",
+          "category": "conventions",
+          "comment": "The commented path filters are a good idea but incomplete. Consider uncommenting and expanding them to include other relevant file types like .cs, .py, .json, .yml based on your repository's tech stack mentioned in the PR description (C#, TypeScript, Python).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 34,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Consider adding error handling or a notification step if the Claude review fails. Currently, failures would be silent except in the Actions log. You could add a step to comment on the PR if the review fails.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 33,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Similar to the code review workflow, add error handling or notification if Claude fails to process the request. Users should know if their @claude mention didn't work.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "line": 39,
+          "severity": "nitpick",
+          "category": "conventions",
+          "comment": "The plugin_marketplaces URL uses .git extension which is unconventional for GitHub URLs. Verify this is the correct format required by the action. Typically GitHub URLs don't need the .git suffix.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "line": 14,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "The conditional logic is complex and repeated across multiple event types. Consider extracting this to a reusable composite action or simplifying by using a single condition that checks for @claude in any event body/title.",
+          "positive": 0,
+          "negative": 0
+        }
+      ]
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T18:17:28.236Z",
-    "totalReviews": 4,
+    "lastUpdated": "2026-01-16T20:30:49.865Z",
+    "totalReviews": 5,
     "overallApprovalRate": 50
   }
 }

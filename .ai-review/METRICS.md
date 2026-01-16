@@ -4,11 +4,11 @@
 
 ## Summary
 
-- **Total Reviews**: 4
-- **Total Comments**: 24
-- **Average Comments per Review**: 6
+- **Total Reviews**: 5
+- **Total Comments**: 39
+- **Average Comments per Review**: 7.8
 - **Overall Approval Rate**: 50%
-- **Last Updated**: 2026-01-16T18:17:28.239Z
+- **Last Updated**: 2026-01-16T20:30:49.869Z
 
 ## Recent Performance
 
@@ -25,33 +25,35 @@
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 4 | 50% |
-| 🟡 warning | 8 | 44.4% |
-| 🔵 suggestion | 10 | 50% |
-| ⚪ nitpick | 2 | 50% |
+| 🔴 critical | 5 | 50% |
+| 🟡 warning | 13 | 44.4% |
+| 🔵 suggestion | 18 | 50% |
+| ⚪ nitpick | 3 | 50% |
 
 ## Issues by Category
 
 | Category | Count | Feedback |
 |----------|-------|----------|
-| codeQuality | 12 | 👍 7 / 👎 7 |
-| documentation | 5 | 👍 2 / 👎 3 |
+| codeQuality | 21 | 👍 7 / 👎 7 |
+| documentation | 6 | 👍 2 / 👎 3 |
+| conventions | 5 | 👍 1 / 👎 2 |
+| security | 4 | 👍 1 / 👎 0 |
 | testCoverage | 3 | 👍 1 / 👎 2 |
-| conventions | 3 | 👍 1 / 👎 2 |
-| security | 1 | 👍 1 / 👎 0 |
 
 ## Weekly Trends
 
 | Week | Reviews | 👍 | 👎 | Approval |
 |------|---------|----|----|----------|
-| 2026-W03 | 4 | 13 | 13 | 50% |
+| 2026-W03 | 5 | 13 | 13 | 50% |
 
 ## Most Commented Files
 
 | File | Comments |
 |------|----------|
 | `test-sample.ts` | 17 |
+| `.github/workflows/claude-code-review.yml` | 8 |
 | `test-feedback.ts` | 7 |
+| `.github/workflows/claude.yml` | 7 |
 
 ---
 
