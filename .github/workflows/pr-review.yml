@@ -51,8 +51,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install AI Review package
-        run: npm install @hgarcianareia/ai-pr-review-github@1.0.11
+      - name: Install AI Review package (from local source)
+        run: |
+          # Install dependencies for core package
+          cd packages/core && npm install && cd ../..
+          # Install dependencies for github package and link to local core
+          cd packages/github && npm install && npm link ../core && cd ../..
 
       - name: Check for config file
         id: config
@@ -134,7 +138,7 @@ jobs:
           AI_REVIEW_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.action }}
           PR_COMMITS: ${{ github.event.pull_request.commits || 0 }}
           CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
-        run: npx ai-pr-review-github
+        run: node packages/github/src/cli.js
 
       - name: Save review cache
         if: always()
