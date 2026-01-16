@@ -4,11 +4,11 @@
 
 ## Summary
 
-- **Total Reviews**: 6
-- **Total Comments**: 77
-- **Average Comments per Review**: 12.8
+- **Total Reviews**: 7
+- **Total Comments**: 111
+- **Average Comments per Review**: 15.9
 - **Overall Approval Rate**: 50%
-- **Last Updated**: 2026-01-16T21:37:26.188Z
+- **Last Updated**: 2026-01-16T21:41:01.776Z
 
 ## Recent Performance
 
@@ -25,7 +25,7 @@
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 42 | 50% |
+| 🔴 critical | 76 | 50% |
 | 🟡 warning | 14 | 44.4% |
 | 🔵 suggestion | 18 | 50% |
 | ⚪ nitpick | 3 | 50% |
@@ -34,7 +34,7 @@
 
 | Category | Count | Feedback |
 |----------|-------|----------|
-| security | 42 | 👍 1 / 👎 0 |
+| security | 76 | 👍 1 / 👎 0 |
 | codeQuality | 21 | 👍 7 / 👎 7 |
 | documentation | 6 | 👍 2 / 👎 3 |
 | conventions | 5 | 👍 1 / 👎 2 |
@@ -44,15 +44,15 @@
 
 | Week | Reviews | 👍 | 👎 | Approval |
 |------|---------|----|----|----------|
-| 2026-W03 | 6 | 13 | 13 | 50% |
+| 2026-W03 | 7 | 13 | 13 | 50% |
 
 ## Most Commented Files
 
 | File | Comments |
 |------|----------|
-| `demo/api-handler.py` | 21 |
+| `demo/api-handler.py` | 43 |
+| `demo/payment-processor.ts` | 29 |
 | `test-sample.ts` | 17 |
-| `demo/payment-processor.ts` | 17 |
 | `.github/workflows/claude-code-review.yml` | 8 |
 | `test-feedback.ts` | 7 |
 | `.github/workflows/claude.yml` | 7 |
