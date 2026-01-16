@@ -630,3 +630,166 @@ export function chunkDiff(diff, files, maxSize) {
 
   return chunks;
 }
+
+/**
+ * Attempt to repair malformed JSON from Claude API responses
+ * Common issues:
+ * - Unescaped quotes in strings
+ * - Trailing commas
+ * - Truncated responses
+ * - Control characters in strings
+ *
+ * @param {string} jsonString - The potentially malformed JSON string
+ * @returns {object} - Parsed JSON object
+ * @throws {Error} - If JSON cannot be repaired
+ */
+export function repairAndParseJSON(jsonString) {
+  // First, try to parse as-is
+  try {
+    return JSON.parse(jsonString);
+  } catch (firstError) {
+    // Continue to repair attempts
+  }
+
+  let repaired = jsonString;
+
+  // Remove any text before the first { and after the last }
+  const startIndex = repaired.indexOf('{');
+  const endIndex = repaired.lastIndexOf('}');
+  if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+    repaired = repaired.substring(startIndex, endIndex + 1);
+  }
+
+  // Fix common issues
+
+  // 1. Remove control characters except \n, \r, \t within strings
+  repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+
+  // 2. Fix trailing commas before ] or }
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+  // 3. Try to parse after basic fixes
+  try {
+    return JSON.parse(repaired);
+  } catch (secondError) {
+    // Continue to more aggressive repairs
+  }
+
+  // 4. Try to fix unescaped quotes in string values
+  // This is tricky - we need to find strings and escape internal quotes
+  repaired = fixUnescapedQuotesInJSON(repaired);
+
+  try {
+    return JSON.parse(repaired);
+  } catch (thirdError) {
+    // Continue to truncation repair
+  }
+
+  // 5. Handle truncated JSON - try to close unclosed structures
+  repaired = closeTruncatedJSON(repaired);
+
+  try {
+    return JSON.parse(repaired);
+  } catch (fourthError) {
+    // If all repairs fail, throw with details
+    throw new Error(
+      `Failed to parse JSON after repair attempts. ` +
+      `Original error: ${fourthError.message}. ` +
+      `JSON snippet: ${jsonString.substring(0, 500)}...`
+    );
+  }
+}
+
+/**
+ * Attempt to fix unescaped quotes within JSON string values
+ * @param {string} json - JSON string
+ * @returns {string} - Repaired JSON string
+ */
+function fixUnescapedQuotesInJSON(json) {
+  let result = '';
+  let inString = false;
+  let i = 0;
+
+  while (i < json.length) {
+    const char = json[i];
+    const prevChar = i > 0 ? json[i - 1] : '';
+
+    if (char === '"' && prevChar !== '\\') {
+      if (!inString) {
+        // Starting a string
+        inString = true;
+        result += char;
+      } else {
+        // Check if this quote ends the string or is internal
+        // Look ahead to see if next non-whitespace is : , ] or }
+        let j = i + 1;
+        while (j < json.length && /\s/.test(json[j])) j++;
+        const nextSignificant = json[j];
+
+        if (nextSignificant === ':' || nextSignificant === ',' ||
+            nextSignificant === ']' || nextSignificant === '}' ||
+            j >= json.length) {
+          // This quote ends the string
+          inString = false;
+          result += char;
+        } else {
+          // This is an internal quote that should be escaped
+          result += '\\"';
+        }
+      }
+    } else if (char === '\n' && inString) {
+      // Newlines in strings should be escaped
+      result += '\\n';
+    } else if (char === '\t' && inString) {
+      // Tabs in strings should be escaped
+      result += '\\t';
+    } else {
+      result += char;
+    }
+    i++;
+  }
+
+  return result;
+}
+
+/**
+ * Attempt to close truncated JSON by adding missing brackets
+ * @param {string} json - Potentially truncated JSON
+ * @returns {string} - JSON with closing brackets added
+ */
+function closeTruncatedJSON(json) {
+  const stack = [];
+  let inString = false;
+  let i = 0;
+
+  while (i < json.length) {
+    const char = json[i];
+    const prevChar = i > 0 ? json[i - 1] : '';
+
+    if (char === '"' && prevChar !== '\\') {
+      inString = !inString;
+    } else if (!inString) {
+      if (char === '{') stack.push('}');
+      else if (char === '[') stack.push(']');
+      else if (char === '}' || char === ']') {
+        if (stack.length > 0 && stack[stack.length - 1] === char) {
+          stack.pop();
+        }
+      }
+    }
+    i++;
+  }
+
+  // If we're still in a string, close it
+  let result = json;
+  if (inString) {
+    result += '"';
+  }
+
+  // Close any unclosed brackets
+  while (stack.length > 0) {
+    result += stack.pop();
+  }
+
+  return result;
+}

@@ -30,7 +30,8 @@ import {
   checkPRSize,
   extractImports,
   filterBySeverityThreshold,
-  chunkDiff
+  chunkDiff,
+  repairAndParseJSON
 } from './utils.js';
 
 import { FeedbackStore } from './feedback-store.js';
@@ -1168,7 +1169,20 @@ Please review the above changes and provide your feedback in the specified JSON 
         throw new Error('No JSON found in Claude response');
       }
 
-      const review = JSON.parse(jsonMatch[0]);
+      let review;
+      try {
+        review = repairAndParseJSON(jsonMatch[0]);
+      } catch (parseError) {
+        this.log('warn', 'JSON repair failed, attempting raw response parse', {
+          error: parseError.message
+        });
+        // Log the raw response for debugging
+        this.log('debug', 'Raw Claude response', {
+          responseLength: content.text.length,
+          responseSnippet: content.text.substring(0, 1000)
+        });
+        throw parseError;
+      }
       this.log('info', 'Received review from Claude', {
         recommendation: review.summary?.recommendation,
         inlineCommentsCount: review.inlineComments?.length || 0
