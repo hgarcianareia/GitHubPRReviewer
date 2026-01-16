@@ -267,6 +267,22 @@ When enabled, this feature:
 - Shows analytics in GitHub Actions Summary
 - Auto-commits changes after each review
 
+#### Auto-commit Behavior
+
+When `autoCommit` is enabled, the system automatically commits feedback files to your repository's default branch (`main` or `master`). This works for both PR triggers and manual workflow dispatches.
+
+**Files committed:**
+- `.ai-review/feedback-history.json` - Raw feedback data (JSON)
+- `.ai-review/METRICS.md` - Human-readable analytics dashboard
+
+**How it works:**
+1. After each review, the system detects your default branch (tries `main` first, then `master`)
+2. Checks out the default branch, pulls latest changes
+3. Commits the updated feedback files
+4. Pushes to the default branch
+
+This ensures feedback data is always committed to the main branch, even when the review was triggered from a PR on a different branch.
+
 > **Important**: Feedback tracking requires `contents: write` permission to commit the history file:
 > ```yaml
 > permissions:
@@ -454,9 +470,11 @@ If feedback tracking is enabled but `.ai-review/feedback-history.json` is not be
      pull-requests: write
    ```
 
-2. **Check logs**: Look for `[WARN] Failed to commit feedback history:` in the workflow logs.
+2. **Check default branch**: The system auto-detects `main` or `master` as the default branch. If your repository uses a different default branch name, auto-commit may fail.
 
-3. **Disable auto-commit**: If you don't want auto-commits, set `feedbackTracking.autoCommit: false`. The analytics will still show in the GitHub Actions Summary.
+3. **Check logs**: Look for `[WARN] Failed to commit feedback history:` or `[WARN] Could not detect default branch` in the workflow logs.
+
+4. **Disable auto-commit**: If you don't want auto-commits, set `feedbackTracking.autoCommit: false`. The analytics will still show in the GitHub Actions Summary.
 
 ## License
 
