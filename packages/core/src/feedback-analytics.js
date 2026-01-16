@@ -105,13 +105,33 @@ export class FeedbackAnalytics {
         result.nitpick.count += event.findings.nitpick || 0;
       }
 
-      // Aggregate feedback by severity from top comments
-      if (event.topComments) {
+      // Check if we have detailed topComments with severity
+      const hasDetailedComments = event.topComments && event.topComments.length > 0 &&
+        event.topComments.some(c => c.severity && c.severity !== 'unknown');
+
+      if (hasDetailedComments) {
+        // Use detailed per-comment feedback
         for (const comment of event.topComments) {
           const severity = comment.severity?.toLowerCase() || 'suggestion';
           if (result[severity]) {
             result[severity].positive += comment.positive || 0;
             result[severity].negative += comment.negative || 0;
+          }
+        }
+      } else if (event.feedback && event.findings) {
+        // Fallback: distribute total feedback proportionally across severities
+        const totalFindings =
+          (event.findings.critical || 0) +
+          (event.findings.warning || 0) +
+          (event.findings.suggestion || 0) +
+          (event.findings.nitpick || 0);
+
+        if (totalFindings > 0 && (event.feedback.positive > 0 || event.feedback.negative > 0)) {
+          for (const severity of ['critical', 'warning', 'suggestion', 'nitpick']) {
+            const count = event.findings[severity] || 0;
+            const ratio = count / totalFindings;
+            result[severity].positive += Math.round((event.feedback.positive || 0) * ratio);
+            result[severity].negative += Math.round((event.feedback.negative || 0) * ratio);
           }
         }
       }
@@ -152,13 +172,30 @@ export class FeedbackAnalytics {
         }
       }
 
-      // Aggregate feedback by category from top comments
-      if (event.topComments) {
+      // Check if we have detailed topComments with category
+      const hasDetailedComments = event.topComments && event.topComments.length > 0 &&
+        event.topComments.some(c => c.category && c.category !== 'unknown');
+
+      if (hasDetailedComments) {
+        // Use detailed per-comment feedback
         for (const comment of event.topComments) {
           const category = comment.category || 'codeQuality';
           if (categories[category]) {
             categories[category].positive += comment.positive || 0;
             categories[category].negative += comment.negative || 0;
+          }
+        }
+      } else if (event.feedback && event.commentsByCategory) {
+        // Fallback: distribute total feedback proportionally across categories
+        const totalComments = Object.values(event.commentsByCategory).reduce((a, b) => a + b, 0);
+
+        if (totalComments > 0 && (event.feedback.positive > 0 || event.feedback.negative > 0)) {
+          for (const [category, count] of Object.entries(event.commentsByCategory)) {
+            if (categories[category] && count > 0) {
+              const ratio = count / totalComments;
+              categories[category].positive += Math.round((event.feedback.positive || 0) * ratio);
+              categories[category].negative += Math.round((event.feedback.negative || 0) * ratio);
+            }
           }
         }
       }

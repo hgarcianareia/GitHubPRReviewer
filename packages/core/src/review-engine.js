@@ -563,11 +563,21 @@ export class ReviewEngine {
       };
       const topComments = [];
 
+      // Build a map of comments with reactions from previousFeedback for quick lookup
+      const feedbackByKey = new Map();
+      if (previousFeedback?.byComment && Array.isArray(previousFeedback.byComment)) {
+        for (const fb of previousFeedback.byComment) {
+          const key = `${fb.file}:${fb.line}`;
+          feedbackByKey.set(key, fb);
+        }
+      }
+
       for (const review of reviews) {
         for (const comment of review.inlineComments || []) {
           // Count by severity
-          if (severityCounts[comment.severity] !== undefined) {
-            severityCounts[comment.severity]++;
+          const severity = comment.severity || 'suggestion';
+          if (severityCounts[severity] !== undefined) {
+            severityCounts[severity]++;
           }
 
           // Count by category (review area)
@@ -575,20 +585,20 @@ export class ReviewEngine {
           if (categoryCounts[category] !== undefined) {
             categoryCounts[category]++;
           }
-        }
-      }
 
-      // Extract top comments with their feedback (from previousFeedback)
-      if (previousFeedback?.byComment && Array.isArray(previousFeedback.byComment)) {
-        for (const commentFeedback of previousFeedback.byComment.slice(0, 10)) {
+          // Add to topComments with severity info
+          // Check if this comment has reactions from previous feedback
+          const key = `${comment.file}:${comment.line}`;
+          const existingFeedback = feedbackByKey.get(key);
+
           topComments.push({
-            file: commentFeedback.file,
-            line: commentFeedback.line,
-            severity: commentFeedback.severity || 'unknown',
-            category: 'unknown',
-            comment: commentFeedback.body || '',
-            positive: commentFeedback.positive,
-            negative: commentFeedback.negative
+            file: comment.file,
+            line: comment.line,
+            severity: severity,
+            category: category,
+            comment: comment.comment || '',
+            positive: existingFeedback?.positive || 0,
+            negative: existingFeedback?.negative || 0
           });
         }
       }
