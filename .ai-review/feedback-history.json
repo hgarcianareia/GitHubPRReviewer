@@ -375,11 +375,45 @@
         "total": 6
       },
       "topComments": []
+    },
+    {
+      "id": "b90515ca-fd78-40c0-b8b6-51f41cb34db5",
+      "timestamp": "2026-01-16T14:41:32.136Z",
+      "prNumber": 18,
+      "prTitle": "Test/ai review demo",
+      "prAuthor": "hgarcianareia",
+      "headSha": "bbe2e08278956bf571b8aca1f511d14daff65bf3",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 1,
+        "linesReviewed": 7,
+        "commentsPosted": 5
+      },
+      "findings": {
+        "critical": 1,
+        "warning": 2,
+        "suggestion": 2,
+        "nitpick": 1
+      },
+      "commentsByCategory": {
+        "security": 0,
+        "codeQuality": 0,
+        "documentation": 1,
+        "testCoverage": 0,
+        "conventions": 0
+      },
+      "feedback": {
+        "positive": 4,
+        "negative": 2,
+        "total": 6
+      },
+      "topComments": []
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T14:31:51.681Z",
-    "totalReviews": 11,
-    "overallApprovalRate": 65.1
+    "lastUpdated": "2026-01-16T14:41:32.137Z",
+    "totalReviews": 12,
+    "overallApprovalRate": 65.3
   }
 }
