@@ -90,11 +90,100 @@
           "negative": 0
         }
       ]
+    },
+    {
+      "id": "89431a95-c2a8-4bf7-b006-2b7360dd73b7",
+      "timestamp": "2026-01-16T16:09:27.806Z",
+      "prNumber": 18,
+      "prTitle": "Test/ai review demo",
+      "prAuthor": "hgarcianareia",
+      "headSha": "bbe2e08278956bf571b8aca1f511d14daff65bf3",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 1,
+        "linesReviewed": 7,
+        "commentsPosted": 6
+      },
+      "findings": {
+        "critical": 1,
+        "warning": 2,
+        "suggestion": 3,
+        "nitpick": 0
+      },
+      "commentsByCategory": {
+        "security": 0,
+        "codeQuality": 3,
+        "documentation": 1,
+        "testCoverage": 1,
+        "conventions": 1
+      },
+      "feedback": {
+        "positive": 7,
+        "negative": 7,
+        "total": 14
+      },
+      "topComments": [
+        {
+          "file": "test-sample.ts",
+          "line": 3,
+          "severity": "warning",
+          "category": "documentation",
+          "comment": "Missing JSDoc documentation. Add documentation describing the function's purpose, parameters, return value, and any constraints (e.g., valid discount range).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 4,
+          "severity": "critical",
+          "category": "codeQuality",
+          "comment": "The TODO for input validation should be implemented, not left as a comment. Without validation, this function can produce incorrect results (negative prices, discounts over 100%, etc.). Add validation to ensure: 1) price >= 0, 2) discountPercent is between 0 and 100.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 5,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "For financial calculations, consider using a library like decimal.js or big.js to avoid floating-point precision issues. Alternatively, work with cents (integers) instead of dollars to maintain precision.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 6,
+          "severity": "suggestion",
+          "category": "codeQuality",
+          "comment": "Consider rounding the final result to 2 decimal places to ensure consistent monetary values and avoid floating-point precision issues.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 1,
+          "severity": "warning",
+          "category": "testCoverage",
+          "comment": "No unit tests found for this new function. Add comprehensive tests covering: normal cases, edge cases (0% discount, 100% discount), boundary values, and error cases (negative values, invalid percentages).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "test-sample.ts",
+          "line": 3,
+          "severity": "suggestion",
+          "category": "conventions",
+          "comment": "Consider making the function more flexible by accepting an options object for future extensibility (e.g., rounding strategy, currency handling). However, this is optional for the current simple use case.",
+          "positive": 0,
+          "negative": 0
+        }
+      ]
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T15:57:37.406Z",
-    "totalReviews": 1,
-    "overallApprovalRate": 0
+    "lastUpdated": "2026-01-16T16:09:27.806Z",
+    "totalReviews": 2,
+    "overallApprovalRate": 50
   }
 }
