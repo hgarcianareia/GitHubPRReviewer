@@ -1246,11 +1246,352 @@
           "negative": 0
         }
       ]
+    },
+    {
+      "id": "8b22c0e3-c1b3-469c-9e5f-b315b439904a",
+      "timestamp": "2026-01-19T13:39:48.529Z",
+      "prNumber": 23,
+      "prTitle": "feat: Add user management and payment processing services",
+      "prAuthor": "hgarcianareia",
+      "headSha": "34e9f7bdd9eb996f0be81b3b04f30446f714c413",
+      "reviewEvent": "REQUEST_CHANGES",
+      "platform": "github",
+      "summary": {
+        "filesReviewed": 3,
+        "linesReviewed": 544,
+        "commentsPosted": 34
+      },
+      "findings": {
+        "critical": 34,
+        "warning": 0,
+        "suggestion": 0,
+        "nitpick": 0
+      },
+      "commentsByCategory": {
+        "security": 34,
+        "codeQuality": 0,
+        "documentation": 0,
+        "testCoverage": 0,
+        "conventions": 0
+      },
+      "feedback": {
+        "positive": 0,
+        "negative": 0,
+        "total": 0
+      },
+      "topComments": [
+        {
+          "file": "demo/api-handler.py",
+          "line": 14,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Hardcoded API key in source code. This is a critical security vulnerability. API keys should be stored in environment variables or a secure secrets management system, never committed to source control.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 27,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Insecure deserialization using pickle.loads() on user-provided data. This allows arbitrary code execution. Never use pickle on untrusted data. Use JSON or other safe serialization formats instead.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 32,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Command injection vulnerability. Using shell=True with user input allows arbitrary command execution. Use subprocess with a list of arguments and shell=False, or better yet, avoid executing user-provided commands entirely.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 37,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SSL verification disabled (verify=False) makes the application vulnerable to man-in-the-middle attacks. Always verify SSL certificates in production.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 38,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Unsafe YAML loading. yaml.load() without a Loader is deprecated and unsafe as it can execute arbitrary Python code. Use yaml.safe_load() instead.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 47,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability. User input is directly interpolated into the SQL query. Use parameterized queries to prevent SQL injection attacks.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 59,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability in authentication. Attackers can bypass authentication with inputs like \"admin' OR '1'='1\". Additionally, passwords should never be stored or compared in plain text. Use parameterized queries and password hashing (bcrypt, argon2).",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 92,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability. User ID should be parameterized. More critically, this query returns sensitive PII including passwords, SSNs, and credit card numbers which should NEVER be stored unencrypted or returned in API responses.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 103,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Exposing plain text password in API response is a critical security violation. Passwords should never be returned to clients, even to the user themselves.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 104,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Exposing SSN (Social Security Number) in API response violates data protection regulations and is a severe security risk. SSNs should be encrypted at rest and never exposed in APIs.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 105,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Exposing full credit card numbers violates PCI DSS compliance. Credit card data must be encrypted and should never be returned in full. At most, return last 4 digits.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 115,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Server-Side Request Forgery (SSRF) vulnerability. The application makes requests to user-controlled URLs, allowing attackers to scan internal networks or access internal services. Validate and whitelist allowed callback URLs.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 126,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability. User-provided query is executed directly, allowing attackers to read, modify, or delete any data in the database. Never allow users to provide raw SQL queries.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 145,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Hardcoded admin credentials in source code. This is a critical security vulnerability that allows anyone with code access to gain admin privileges. Use proper authentication mechanisms.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 150,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability in admin token validation. Use parameterized queries.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 160,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Command injection vulnerability. User-controlled backup_name is used in shell command. Use subprocess with proper argument handling instead of os.system().",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 167,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Command injection vulnerability. User input (subject, body, to_address) is used in shell command without sanitization. Use a proper email library instead.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 175,
+          "severity": "critical",
+          "category": "security",
+          "comment": "XML External Entity (XXE) vulnerability. ET.fromstring() is vulnerable to XXE attacks. Use defusedxml library or configure parser to disable external entities.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 181,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Exposing API keys and secrets in configuration endpoint. Secrets should never be exposed through APIs, even in debug mode.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/api-handler.py",
+          "line": 195,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Exposing full stack traces and configuration (including secrets) in error responses is a critical information disclosure vulnerability. This gives attackers valuable information about the system.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 21,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Hardcoded API keys in source code. These should be stored in environment variables or a secure secrets management system. Committed secrets can be extracted from git history even after removal.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 22,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Hardcoded secret key in source code. This is a critical security vulnerability.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 27,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Logging API keys is a security violation. Keys should never appear in logs as they can be accessed by unauthorized personnel or leaked.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 32,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Logging full payment data including card numbers and CVV violates PCI DSS compliance. This is a critical security violation. Card data should NEVER be logged.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 61,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Logging full payment response may include sensitive card data. Additionally, logging should not include PII or payment details.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 67,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Returning full card number in API response is a severe PCI DSS violation. Only the last 4 digits should ever be returned. This could result in massive fines and loss of payment processing privileges.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 70,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Logging full card number in error messages violates PCI DSS. Never log card data, especially in error scenarios.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 89,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Storing full card details including CVV in localStorage is a critical PCI DSS violation. Card data must never be stored client-side. CVV should NEVER be stored anywhere per PCI requirements. Use tokenization instead.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 104,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability. User ID should be parameterized. Additionally, storing CVV violates PCI DSS - CVV must never be stored after authorization.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 125,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability. Both discountCode and userId are vulnerable to SQL injection. Use parameterized queries.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 138,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Off-by-one error: loop condition should be `i < items.length` not `i <= items.length`. This will cause an array index out of bounds error and crash.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 158,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability and missing authentication. Users could modify other users' subscriptions. Use parameterized queries and verify the user has permission to modify this subscription.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 165,
+          "severity": "critical",
+          "category": "security",
+          "comment": "SQL injection vulnerability and data exposure. This exposes all transaction data without authorization checks or data filtering. Transactions contain sensitive financial information.",
+          "positive": 0,
+          "negative": 0
+        },
+        {
+          "file": "demo/payment-processor.ts",
+          "line": 169,
+          "severity": "critical",
+          "category": "security",
+          "comment": "Missing webhook signature verification. Webhooks must verify the signature to ensure they come from the legitimate payment provider. Without this, attackers can forge webhook events.",
+          "positive": 0,
+          "negative": 0
+        }
+      ]
     }
   ],
   "metadata": {
-    "lastUpdated": "2026-01-16T21:41:01.772Z",
-    "totalReviews": 7,
+    "lastUpdated": "2026-01-19T13:39:48.529Z",
+    "totalReviews": 8,
     "overallApprovalRate": 50
   }
 }
