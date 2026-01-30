@@ -1,21 +1,21 @@
 # AI PR Review Metrics
 
-> Auto-generated on 2026-01-19
+> Auto-generated on 2026-01-30
 
 ## Summary
 
-- **Total Reviews**: 8
-- **Total Comments**: 145
-- **Average Comments per Review**: 18.1
+- **Total Reviews**: 9
+- **Total Comments**: 187
+- **Average Comments per Review**: 20.8
 - **Overall Approval Rate**: 50%
-- **Last Updated**: 2026-01-19T13:39:48.540Z
+- **Last Updated**: 2026-01-30T15:08:39.646Z
 
 ## Recent Performance
 
 ### Last 7 Days
-- Reviews: 13
-- Approval Rate: 50%
-- Total Reactions: 26
+- Reviews: 0
+- Approval Rate: 0%
+- Total Reactions: 0
 
 ### Last 30 Days
 - Approval Rate: 50%
@@ -25,7 +25,7 @@
 
 | Severity | Count | Approval Rate |
 |----------|-------|---------------|
-| 🔴 critical | 110 | 50% |
+| 🔴 critical | 152 | 50% |
 | 🟡 warning | 14 | 44.4% |
 | 🔵 suggestion | 18 | 50% |
 | ⚪ nitpick | 3 | 50% |
@@ -34,8 +34,8 @@
 
 | Category | Count | Feedback |
 |----------|-------|----------|
-| security | 110 | 👍 1 / 👎 0 |
-| codeQuality | 21 | 👍 7 / 👎 7 |
+| security | 151 | 👍 1 / 👎 0 |
+| codeQuality | 22 | 👍 7 / 👎 7 |
 | documentation | 6 | 👍 2 / 👎 3 |
 | conventions | 5 | 👍 1 / 👎 2 |
 | testCoverage | 3 | 👍 1 / 👎 2 |
@@ -46,17 +46,19 @@
 |------|---------|----|----|----------|
 | 2026-W03 | 7 | 13 | 13 | 50% |
 | 2026-W04 | 1 | 0 | 0 | 0% |
+| 2026-W05 | 1 | 0 | 0 | 0% |
 
 ## Most Commented Files
 
 | File | Comments |
 |------|----------|
-| `demo/api-handler.py` | 63 |
-| `demo/payment-processor.ts` | 43 |
+| `demo/api-handler.py` | 84 |
+| `demo/payment-processor.ts` | 63 |
 | `test-sample.ts` | 17 |
 | `.github/workflows/claude-code-review.yml` | 8 |
 | `test-feedback.ts` | 7 |
 | `.github/workflows/claude.yml` | 7 |
+| `demo/user-service.js` | 1 |
 
 ---
 
